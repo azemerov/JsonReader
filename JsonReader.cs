@@ -1,5 +1,8 @@
 /*
 * Converts data records returned into JSON structured object.
+* Distributed under GPLv3 license (see LICENSE file)
+* Repository: https://github.com/azemerov/JsonReader
+*
 * A metadata object has to be created using MakeMeta() function whcih takes JSON string which describes expected data structure.
 * Then call metadata.ConstructJson() which takes IDataReader object.
 * Metadata should be described like 
@@ -31,7 +34,6 @@
 *
 */
 
-//-using System.Text.Json;
 using Newtonsoft.Json.Linq;
 using System.Collections.Generic;
 using System.Data;
@@ -184,8 +186,10 @@ namespace Vespa.Db
 
         static protected internal int ColumnIndex(IDataReader rs, string columnName)
         {
-            try { return rs.GetOrdinal(columnName); }
-            catch {return -1;}
+            for (int i=0; i<rs.FieldCount; i++)
+                if (rs.GetName(i).Equals(columnName))
+                    return i;
+            return -1;
         }
 
         static protected internal string GetString(IDataReader rs, int columnIndex, string defaultValue)
@@ -199,14 +203,13 @@ namespace Vespa.Db
             }
             else
                 return defaultValue;
-
         }
 
         protected internal virtual void Process(IDataReader rs, ref JObject result)
         {
             //System.Console.WriteLine($"    Process(object) {this.Name}");
 
-            if (result.Count==0) //optimization
+            if (result.Count==0) // optimization - not yet loaded
                 foreach(var map in Mappings)
                 {
                     var idx = ColumnIndex(rs, map.Expression);

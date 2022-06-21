@@ -169,6 +169,7 @@ order by s.id, p.stock_point_id, h.shop_id";
             return OracleTest(connection, metaStr, sql, print);
         }
 
+        static bool DO_PRINT = false;
         static void Main(string[] args)
         {
             string connectionStr = "";
@@ -177,7 +178,6 @@ order by s.id, p.stock_point_id, h.shop_id";
                     if (line.StartsWith("connection="))
                         connectionStr = line.Substring(11);
                 
-            bool DO_PRINT = false;
             bool memoryTest = false;
             bool stationTest = false;
             bool ataTest = false;
@@ -189,16 +189,10 @@ order by s.id, p.stock_point_id, h.shop_id";
                 else if (a.Equals("A")) ataTest = true;
 
             //TestJObject();
-            // demonstrates sub-object and two parallel collections without Oracle connection
-            int cnt;
-            System.DateTime started;
 
             if (memoryTest)
-            {
-            started = System.DateTime.Now;
-            cnt = InMemoryTest(DO_PRINT);
-            Console.WriteLine($"InMemoryTest cnt={cnt}, elapsed: {System.DateTime.Now.Subtract(started)}");
-            }
+                // demonstrates sub-object and two parallel collections without Oracle connection
+                wrap("InMemoryTest", InMemoryTest);
 
             if (stationTest || ataTest)
             {
@@ -211,21 +205,27 @@ order by s.id, p.stock_point_id, h.shop_id";
                 connection.Open();
 
                 if (stationTest)
-                {
                     // demonstrates sub-object and sub-collection
-                    started = System.DateTime.Now;
-                    cnt = OracleStationTest(connection, DO_PRINT);
-                    Console.WriteLine($"OracleStationTest cnt={cnt}, elapsed: {System.DateTime.Now.Subtract(started)}");
-                }
+                    wrap(connection, "OracleStationTest", OracleStationTest);
+
                 if (ataTest)
-                {
                     // demonstrates two parallel sub-collections
-                    started = System.DateTime.Now;
-                    cnt = OracleATATest(connection, DO_PRINT);
-                    Console.WriteLine($"OracleATATest cnt={cnt}, elapsed: {System.DateTime.Now.Subtract(started)}");
-                }
+                    wrap(connection, "OracleATATest", OracleATATest);
             }
         }
+
+        public static void wrap(string name, Func<bool, int> orig)
+        {
+            System.DateTime started = System.DateTime.Now;
+            int cnt = orig(DO_PRINT);
+            Console.WriteLine($"{name} cnt={cnt}, elapsed: {System.DateTime.Now.Subtract(started)}");
+        } 
+        public static void wrap(OracleConnection connection, string name, Func<OracleConnection, bool, int> orig)
+        {
+            System.DateTime started = System.DateTime.Now;
+            int cnt = orig(connection, DO_PRINT);
+            Console.WriteLine($"{name} cnt={cnt}, elapsed: {System.DateTime.Now.Subtract(started)}");
+        } 
     }
 
 }
