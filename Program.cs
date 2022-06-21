@@ -111,10 +111,10 @@ namespace JsonTest
     '$collectionid': 'ATA_ID',
     'ata_id': 'ATA_ID',
     'chapter_name': 'ATA_DESCRIPTION',
-    'ata_flags': [{
+    'ata_flags': {
         'has_oil_svc_yn': 'ATA_FLAG1',
         'is_oil_svc_yn': 'ATA_FLAG2'
-    }],
+    },
     'sub_atas': [{
         '$collectionid': 'SUB_ATA_ID',
         'id': 'SUB_ATA_ID',
@@ -151,12 +151,6 @@ from ATA_CHAPTER C left join ATA_CHAPTER_MTX_FLAG CF on CF.ATA_ID=C.ATA_ID left 
         'id': 'SHOP_ID',
         'name': 'SHOP_DESCRIPTION'
     }]
-}";
-            metaStr = 
-@"{
-    '$collectionid': 'ID',
-    'id': 'ID',
-    'airport': 'AIRPORT_IDENTIFIER'
 }";
 
             var sql = 
