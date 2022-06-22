@@ -1,7 +1,7 @@
 /*
 * CSVDataReader - CVS data reader which implements IDataReader interface
 * As a parameter it takes IMyLineReader object, can be MyFileReader (read lines from a file) or MyListReader (reads data from a List<string> object)
-* Cloned from Joseph Shijo's example -
+* Originated from Joseph Shijo's example -
 * https://www.codeproject.com/Tips/1029831/Fast-and-Simple-IDataReader-Implementation-to-Read
 */
 
@@ -13,493 +13,282 @@ using System.Data;
 namespace Vespa.Data
 {
 
-    public interface IMyLineReader
+    public interface ILineReader
     {
         public bool EndOfStream { get; }
         public string ReadLine();
+        public void Reset();
         public void Close();
         public void Dispose();
     }
 
-    public class MyFileReader: IMyLineReader
+    public class FileReader: ILineReader
     {
-        private StreamReader _file;
-        public MyFileReader(string filePath)
+        private string filePath;
+        private StreamReader file;
+
+        public FileReader(string filePath)
         {
-            _file = File.OpenText(filePath);
+            this.filePath = filePath;
+            file = File.OpenText(filePath);
         }
-        public bool EndOfStream { get {return _file.EndOfStream;} }
-        public string ReadLine() {
-            if (_file.EndOfStream)
+
+        public bool EndOfStream { get {return file.EndOfStream;} }
+
+        public string ReadLine()
+        {
+            if (file.EndOfStream)
                 return "";
             else
-                return _file.ReadLine();
+                return file.ReadLine();
         }
-        public void Close() { _file.Close(); }
-        public void Dispose() { _file.Dispose(); }
+
+        public void Reset()
+        {
+            file.Close();
+            file = File.OpenText(filePath);
+        }
+
+        public void Close() { file.Close(); }
+
+        public void Dispose() { file.Dispose(); }
     }
 
-    public class MyListReader: IMyLineReader
+    public class ListReader: ILineReader
     {
-        private List<string> _lines;
-        private int _index;
-        public MyListReader(List<string> lines)
+        private List<string> lines;
+        private int index;
+        
+        public ListReader(List<string> lines)
         {
-            _lines = lines;
-            for (int i=0; i<_lines.Count; i++)
-                _lines[i] = _lines[i];
-            _index = 0;
+            this.lines = lines;
+            index = 0;
         }
-        public bool EndOfStream { get {return _index >= _lines.Count;} }
+
+        public bool EndOfStream { get {return index >= lines.Count;} }
+        
         public string ReadLine() {
             if (EndOfStream)
                 return "";
             else
-                return _lines[_index++];
+                return lines[index++];
         }
+        
+        public void Reset()  { index = 0; }
+
         public void Close() {  }
+
         public void Dispose() {  }
     }
 
     public class CSVDataReader : IDataReader, IDisposable
     {
-        private IMyLineReader _reader;
-        private char _delimiter;
-        /* stores the header and values of csv and also virtual*/
-        private string _virtualHeaderString = "", _csvHeaderstring = "", _csvlinestring = "", _virtuallineString = "";
-        private bool _firstRowHeader = true;
+        private ILineReader reader;
+        private char delimiter;
 
-        private string[] _header;
-        
-        /// <summary>
-        /// Returns an array of header names as string in the order of columns 
-        /// from left to right of csv file. If CSV file doesn't have header then a dummy header 
-        /// with 'COL_' + 'column position' will be returned. This can be manually renamed calling 
-        /// 'RenameCSVHeader'
-        /// </summary>
-        public string[] Header
+        // Returns an array of header names as string in the order of columns 
+        // from left to right of csv file. If CSV file doesn't have header then a dummy header 
+        // with 'COL_' + 'column position' will be returned.
+        public string[] Header;
+
+        // Returns an array of strings from the current line of csv file. 
+        // Is filled by Read() method
+        private string[] line;
+
+        private int recordsAffected;
+
+        // Creates an instance of CSV reader
+        // <param name="reader">IMyLineReader object</param>
+        // <param name="delimiter">delimiter character used in csv file.</param>
+        // <param name="firstRowHeader">specify the csv got a header in first row or not. 
+        // Default is true and if argument is false then auto header 'ROW_xx will be used as per 
+        // the order of columns.</param>
+        public CSVDataReader(ILineReader reader, char delimiter = ',', bool firstRowHeader = true)
         {
-            get { return _header; }
-        }
-
-        /*
-         * The values of header and values must be in same order. So using this collection.
-         * This collection stores header key as header name and its related value as value. 
-         * When the value of a specific 
-         * header is updated the specific key value will be updated. 
-         * For Original Header values from the csv file the values will be null. 
-         * This is used as a check and identify this is a csv value or not.
-         */
-        private System.Collections.Specialized.OrderedDictionary headercollection = 
-					new System.Collections.Specialized.OrderedDictionary();
-
-        private string[] _line;
-
-        /// <summary>
-        /// Returns an array of strings from the current line of csv file. 
-        /// Call Read() method to read the next line/record of csv file. 
-        /// </summary>
-        public string[] Line
-        {
-            get
+            this.reader = reader;
+            this.delimiter = delimiter;
+            if (firstRowHeader == true)
             {
-                return _line;
-            }
-        }
-
-        private int recordsaffected;
-        private bool _iscolumnlocked = false;
-
-        /// <summary>
-        /// Creates an instance of CSV reader
-        /// </summary>
-        /// <param name="filePath">Path to the csv file.</param>
-        /// <param name="delimiter">delimiter character used in csv file.</param>
-        /// <param name="firstRowHeader">specify the csv got a header in first row or not. 
-        /// Default is true and if argument is false then auto header 'ROW_xx will be used as per 
-        /// the order of columns.</param>
-        public CSVDataReader(IMyLineReader reader /*string filePath*/, char delimiter = ',', bool firstRowHeader = true)
-        {
-            //_file = File.OpenText(filePath);
-            _reader = reader;
-            _delimiter = delimiter;
-            _firstRowHeader = firstRowHeader;
-            if (_firstRowHeader == true)
-            {
-                Read();
-                _csvHeaderstring = _csvlinestring;
-                _header = ReadRow(_csvHeaderstring);
-                foreach (var item in _header) //check for duplicate headers and create a header record.
-                {
-                    if (headercollection.Contains(item) == true)
-                        throw new Exception("Duplicate found in CSV header. Cannot create a CSV reader instance with duplicate header");
-                    headercollection.Add(item, null);
-                }
+                if (Read())
+                    Header = line;
             }
             else
             {
-                //just open and close the file with read of first line to determine how many 
-        		//rows are there and then add default rows as  row1,row2 etc to collection.
+                // read the first line to determine number of columns
                 Read();
-                _csvHeaderstring = _csvlinestring;
-                _header = ReadRow(_csvHeaderstring);
+                Header = line;
                 int i = 0;
-                _csvHeaderstring = "";
-                foreach (var item in _header)//read each column and create a dummy header.
+                var s = "";
+                foreach (var item in Header)//read each column and create a dummy header.
                 {
-                    headercollection.Add("COL_" + i.ToString(), null);
-                    _csvHeaderstring = _csvHeaderstring + "COL_" + i.ToString() + _delimiter;
+                    s = s + "COL_" + i.ToString() + this.delimiter;
                     i++;
                 }
-                _csvHeaderstring.TrimEnd(_delimiter);
-                _header = ReadRow(_csvHeaderstring);
-                Close(); //close and repoen to get the record position to beginning.
-                //_file = File.OpenText(filePath);
-                _reader = reader;
+                s = s.TrimEnd(this.delimiter);
+                Header = ParseRow(s);
+                reader.Reset();
             }
-            _iscolumnlocked = false; //setting this to false since above read is called 
-			//internally during constructor and actual user read() didnot start.
-            _csvlinestring = "";
-            _line = null;
-            recordsaffected = 0;
-
+            line = null;
+            recordsAffected = 0;
         }
-        public bool Read()
+
+        public bool Read()  //: IDataReader
         {
-            var result = !_reader.EndOfStream;
+            var result = !reader.EndOfStream;
             if (result == true)
             {
-                _csvlinestring = _reader.ReadLine();
-                if (_virtuallineString == "")
-                    _line = ReadRow(_csvlinestring);
-                else
-                    _line = ReadRow(_virtuallineString + _delimiter + _csvlinestring);
-                recordsaffected++;
+                var s = reader.ReadLine();
+                line = ParseRow(s);
+                recordsAffected++;
             }
-            if (_iscolumnlocked == false)
-                _iscolumnlocked = true;
             return result;
         }
 
-        /// <summary>
-        /// Adds a new virtual column at the beginning of each row. 
-	/// If a virtual column exists then the new one is placed left of the first one. 
-	/// Adding virtual column is possible only before read is made.
-        /// </summary>
-        /// <param name="columnName">Name of the header of column</param>
-        /// <param name="value">Value for this column. This will be returned for every row 
-	/// for this column until the value for this column is changed through method 
-	/// 'UpdateVirtualcolumnValues'</param>
-        /// <returns>Success status</returns>
-        public bool AddVirtualColumn(string columnName, string value)
+        // Parse a row of data from a CSV file
+        private string[] ParseRow(string line)
         {
-            if (value == null)
-                return false;
-            if (_iscolumnlocked == true)
-                throw new Exception("Cannot add new records after Read() is called.");
-            if (headercollection.Contains(columnName) == true)
-                throw new Exception("Duplicate found in CSV header.	Cannot create a CSV readerinstance with duplicate header");
-            headercollection.Add(columnName, value); //add this to main collection so that 
-					//we can check for duplicates next time col is added.
-
-            if (_virtualHeaderString == "")
-                _virtualHeaderString = columnName;
-            else
-                _virtualHeaderString = columnName + _delimiter + _virtualHeaderString;
-            _header = ReadRow(_virtualHeaderString + _delimiter + _csvHeaderstring);
-
-            if (_virtuallineString == "")
-                _virtuallineString = value;
-            else
-                _virtuallineString = value + _delimiter + _virtuallineString;
-            _line = ReadRow(_virtuallineString + _delimiter + _csvlinestring);
-            return true;
-        }
-
-        /// <summary>
-        /// Update the column header. This method must be called before Read() method is called. 
-	/// Otherwise it will throw an exception.
-        /// </summary>
-        /// <param name="columnName">Name of the header of column</param>
-        /// <param name="value">Value for this column. This will be returned for every row 
-	/// for this column until the value for this column is changed through method 
-	/// 'UpdateVirtualcolumnValues'</param>
-        /// <returns>Success status</returns>
-        public bool RenameCSVHeader(string oldColumnName, string newColumnName)
-        {
-            if (_iscolumnlocked == true)
-                throw new Exception("Cannot update header after Read() is called.");
-            if (headercollection.Contains(oldColumnName) == false)
-                throw new Exception("CSV header not found. Cannot update.");
-            string value = headercollection[oldColumnName] == null ? 
-			null : headercollection[oldColumnName].ToString();
-            int i = 0;
-            foreach (var item in headercollection.Keys) //this collection does no have a position 
-			//location property so using this way assuming the key is ordered
-            {
-                if (item.ToString() == oldColumnName)
-                    break;
-                i++;
-            }
-            headercollection.RemoveAt(i);
-            headercollection.Insert(i, newColumnName, value);
-            if (value == null) //csv header update.
-            {
-                _csvHeaderstring = _csvHeaderstring.Replace(oldColumnName, newColumnName);
-                _header = ReadRow(_virtualHeaderString + _delimiter + _csvHeaderstring);
-            }
-            else //virtual header update
-            {
-                _virtualHeaderString = _virtualHeaderString.Replace(oldColumnName, newColumnName);
-                _header = ReadRow(_virtualHeaderString + _delimiter + _csvHeaderstring);
-            }
-            return true;
-        }
-
-        /// <summary>
-        /// Updates the value of the virtual column if it exists. Else throws exception.
-        /// </summary>
-        /// <param name="columnName">Name of the header of column</param>
-        /// <param name="value">Value for this column. 
-        /// This new value will be returned for every row for this column until 
-        /// the value for this column is changed again</param>
-        /// <returns>Success status</returns>
-        public bool UpdateVirtualColumnValue(string columnName, string value)
-        {
-            if (value == null)
-                return false;
-            if (headercollection.Contains(columnName) == false)
-                throw new Exception("Unable to find the csv header. Cannot update value.");
-            if (headercollection.Contains(columnName) == true && headercollection[columnName] == null)
-                throw new Exception("Cannot update values for default csv based columns.");
-            headercollection[columnName] = value; //add this to main collection so that 
-				//we can check for duplicates next time col is added.
-            _virtuallineString = "";
-            foreach (var item in headercollection.Values) //cannot use string.replace since 
-		//values may be duplicated and can update wrong column. So rebuilding the string.
-            {
-                if (item != null)
-                {
-                    _virtuallineString = (string)item + _delimiter + _virtuallineString;
-                }
-            }
-            _virtuallineString = _virtuallineString.TrimEnd(',');
-            _line = ReadRow(_virtuallineString + _delimiter + _csvlinestring);
-            return true;
-        }
-
-        /// <summary>
-        /// Reads a row of data from a CSV file
-        /// </summary>
-        /// <returns>array of strings from csv line</returns>
-        private string[] ReadRow(string line)
-        {
-            List<string> lines = new List<string>();
-            if (String.IsNullOrEmpty(line) == true)
-                return null;
-
-            int pos = 0;
-            int rows = 0;
-            while (pos < line.Length)
-            {
-                string value;
-
-                // Special handling for quoted field
-                if (line[pos] == '"')
-                {
-                    // Skip initial quote
-                    pos++;
-
-                    // Parse quoted value
-                    int start = pos;
-                    while (pos < line.Length)
-                    {
-                        // Test for quote character
-                        if (line[pos] == '"')
-                        {
-                            // Found one
-                            pos++;
-
-                            // If two quotes together, keep one
-                            // Otherwise, indicates end of value
-                            if (pos >= line.Length || line[pos] != '"')
-                            {
-                                pos--;
-                                break;
-                            }
-                        }
-                        pos++;
-                    }
-                    value = line.Substring(start, pos - start);
-                    value = value.Replace("\"\"", "\"");
-                }
-                else
-                {
-                    // Parse unquoted value
-                    int start = pos;
-                    while (pos < line.Length && line[pos] != _delimiter)
-                        pos++;
-                    value = line.Substring(start, pos - start);
-                }
-                // Add field to list
-                if (rows < lines.Count)
-                    lines[rows] = value;
-                else
-                    lines.Add(value);
-                rows++;
-
-                // Eat up to and including next comma
-                while (pos < line.Length && line[pos] != _delimiter)
-                    pos++;
-                if (pos < line.Length)
-                    pos++;
-            }
-            return lines.ToArray();
+            line = line.Replace($"\\{delimiter}", "\x0001");
+            var result = line.Split(delimiter);
+            for (int i=0; i<result.Length; i++)
+                result[i] = result[i].Replace("\x0001", $"{delimiter}");
+            return result;
         }
 
         public void Close()
         {
-            _reader.Close();
-            _reader.Dispose();
-            _reader = null;
+            reader.Close();
+            reader.Dispose();
+            reader = null;
         }
 
-        /// <summary>
-        /// Gets a value that indicates the depth of nesting for the current row.
-        /// </summary>
-        public int Depth
+        public int Depth //: IDataReader
         {
             get { return 1; }
         }
 
-        public DataTable GetSchemaTable()
+        public DataTable GetSchemaTable() //: IDataReader
         {
             DataTable t = new DataTable();
             t.Rows.Add(Header);
             return t;
         }
 
-        public bool IsClosed
+        public bool IsClosed //: IDataReader
         {
-            get { return _reader == null; }
+            get { return reader == null; }
         }
 
-        public bool NextResult()
+        public bool NextResult() //: IDataReader
         {
             return Read();
         }
 
-        /// <summary>
-        /// Returns how many records read so far.
-        /// </summary>
-        public int RecordsAffected
+        // Returns how many records are read so far
+        public int RecordsAffected  //: IDataReader
         {
-            get { return recordsaffected; }
+            get { return recordsAffected; }
         }
 
-        public void Dispose()
+        public void Dispose() //: IDisposable
         {
-            if (_reader != null)
+            if (reader != null)
             {
-                _reader.Dispose();
-                _reader = null;
+                reader.Dispose();
+                reader = null;
             }
         }
 
-        /// <summary>
-        /// Gets the number of columns in the current row.
-        /// </summary>
-        public int FieldCount
+        public int FieldCount //: IDataReader
         {
             get { return Header.Length; }
         }
 
-        public bool GetBoolean(int i)
+        public bool GetBoolean(int i)  //: IDataRecord
         {
-            return Boolean.Parse(Line[i]);
+            return Boolean.Parse(line[i]);
         }
 
-        public byte GetByte(int i)
+        public byte GetByte(int i)  //: IDataRecord
         {
-            return Byte.Parse(Line[i]);
+            return Byte.Parse(line[i]);
         }
 
-        public long GetBytes(int i, long fieldOffset, byte[] buffer, int bufferoffset, int length)
-        {
-            throw new NotImplementedException();
-        }
-
-        public char GetChar(int i)
-        {
-            return Char.Parse(Line[i]);
-        }
-
-        public long GetChars(int i, long fieldoffset, char[] buffer, int bufferoffset, int length)
+        public long GetBytes(int i, long fieldOffset, byte[] buffer, int bufferoffset, int length)  //: IDataRecord
         {
             throw new NotImplementedException();
         }
 
-        public IDataReader GetData(int i)
+        public char GetChar(int i)  //: IDataRecord
+        {
+            return Char.Parse(line[i]);
+        }
+
+        public long GetChars(int i, long fieldoffset, char[] buffer, int bufferoffset, int length)  //: IDataRecord
+        {
+            throw new NotImplementedException();
+        }
+
+        public IDataReader GetData(int i)  //: IDataRecord
         {
             return (IDataReader)this;
         }
 
-        public string GetDataTypeName(int i)
+        public string GetDataTypeName(int i)  //: IDataRecord
         {
             throw new NotImplementedException();
         }
 
-        public DateTime GetDateTime(int i)
+        public DateTime GetDateTime(int i)  //: IDataRecord
         {
-            return DateTime.Parse(Line[i]);
+            return DateTime.Parse(line[i]);
         }
 
-        public decimal GetDecimal(int i)
+        public decimal GetDecimal(int i)  //: IDataRecord
         {
-            return Decimal.Parse(Line[i]);
+            return Decimal.Parse(line[i]);
         }
 
-        public double GetDouble(int i)
+        public double GetDouble(int i)  //: IDataRecord
         {
-            return Double.Parse(Line[i]);
+            return Double.Parse(line[i]);
         }
 
-        public Type GetFieldType(int i)
+        public Type GetFieldType(int i)  //: IDataRecord
         {
             return typeof(String);
         }
 
-        public float GetFloat(int i)
+        public float GetFloat(int i)  //: IDataRecord
         {
-            return float.Parse(Line[i]);
+            return float.Parse(line[i]);
         }
 
-        public Guid GetGuid(int i)
+        public Guid GetGuid(int i)  //: IDataRecord
         {
-            return Guid.Parse(Line[i]);
+            return Guid.Parse(line[i]);
         }
 
-        public short GetInt16(int i)
+        public short GetInt16(int i)  //: IDataRecord
         {
-            return Int16.Parse(Line[i]);
+            return Int16.Parse(line[i]);
         }
 
-        public int GetInt32(int i)
+        public int GetInt32(int i)  //: IDataRecord
         {
-            return Int32.Parse(Line[i]);
+            return Int32.Parse(line[i]);
         }
 
-        public long GetInt64(int i)
+        public long GetInt64(int i)  //: IDataRecord
         {
-            return Int64.Parse(Line[i]);
+            return Int64.Parse(line[i]);
         }
 
-        public string GetName(int i)
+        public string GetName(int i)  //: IDataRecord
         {
             return Header[i];
         }
 
-        public int GetOrdinal(string name)
+        public int GetOrdinal(string name)  //: IDataRecord
         {
             int result = -1;
             for (int i = 0; i < Header.Length; i++)
@@ -511,33 +300,33 @@ namespace Vespa.Data
             return result;
         }
 
-        public string GetString(int i)
+        public string GetString(int i)  //: IDataRecord
         {
-            return Line[i];
+            return line[i];
         }
 
-        public object GetValue(int i)
+        public object GetValue(int i)  //: IDataRecord
         {
-            return Line[i];
+            return line[i];
         }
 
-        public int GetValues(object[] values)
+        public int GetValues(object[] values)  //: IDataRecord
         {
-            values = Line;
+            values = line;
             return 1;
         }
 
-        public bool IsDBNull(int i)
+        public bool IsDBNull(int i)  //: IDataRecord
         {
-            return string.IsNullOrWhiteSpace(Line[i]);
+            return string.IsNullOrWhiteSpace(line[i]);
         }
 
-        public object this[string name]
+        public object this[string name]  //: IDataRecord
         {
-            get { return Line[GetOrdinal(name)]; }
+            get { return line[GetOrdinal(name)]; }
         }
 
-        public object this[int i]
+        public object this[int i]  //: IDataRecord
         {
             get { return GetValue(i); }
         }

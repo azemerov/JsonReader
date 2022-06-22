@@ -76,14 +76,8 @@ namespace JsonTest
 
             IDataReader reader;
             List<string> dataLines = new List<string>(dataStr.Replace("\r", "").Split('\n'));
-            //reader = new CSVDataReader(new MyListReader(dataLines), ',', true);
-            //while (reader.Read())
-            //    Console.WriteLine($"{reader.GetValue(0)}, {reader.GetValue(2)}, {reader.GetValue(reader.GetOrdinal("ATA_DESCRIPTION"))}");
-            //reader.Close();
-            //reader.Dispose();
-
             var meta = Meta.MakeMeta(metaStr);
-            /*IDataReader*/ reader = new CSVDataReader(new MyListReader(dataLines), ',', true);
+            reader = new CSVDataReader(new ListReader(dataLines), ',', true);
             object root = meta.ConstructJson(reader);
             reader.Close();
             reader.Dispose();
