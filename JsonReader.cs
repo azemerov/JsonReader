@@ -71,18 +71,13 @@ namespace Vespa.Db
 
         static public Meta MakeMeta(string metaDataStr)
         {
-            //-using JsonDocument metaDoc = JsonDocument.Parse(metaDataStr);
-            //-JsonElement json = metaDoc.RootElement;
             var metaDoc = JObject.Parse(metaDataStr);
             JToken json = metaDoc.Root;
             Meta meta = null;
-            //-if (json.ValueKind==JsonValueKind.Array)
             if (json.Type == JTokenType.Array )
             {
-                //-foreach(var subobj in json.EnumerateArray())
                 foreach(var subobj in json)
                 {
-                    //-JsonElement subjson = (JsonElement) subobj;
                     JToken subjson = subobj;
                     meta = Meta.MakeMeta(subjson, "");
                     break; // we expect only one array item in metadata
@@ -95,36 +90,28 @@ namespace Vespa.Db
             meta = new MetaArray("roots", meta); // wrap into collection
             return meta;
         }
-        //-static protected Meta MakeMeta(System.Text.Json.JsonElement element, string name)
+
         static protected Meta MakeMeta(JToken element, string name)
         {
             Meta result = new(name);
             // var childs = element.EnumerateObject();  while (childs.MoveNext()) { var child = childs.Current; ... }
-            //-foreach (var child in element.EnumerateObject())
             foreach (var child_ in element)
             {
                 JProperty child = (JProperty) child_;
-                //-if (child.Value.ValueKind == JsonValueKind.String)
                 if (child.Value.Type == JTokenType.String )
                 {
-                    //-if (child.Name.Equals("$collectionid"))
                     if (child.Name.Equals("$collectionid"))
-                        //-result.__collectionid = child.Value.ToString();
                         result.__collectionid = (child.Value.ToString());
                     else
-                        //-result.Mappings.Add(new  FieldMap(child.Name, child.Value.ToString()));
                         result.Mappings.Add(new  FieldMap(child.Name, child.Value.ToString()));
                 }
                 else
-                //-if (child.Value.ValueKind == JsonValueKind.Array)
                 if (child.Value.Type == JTokenType.Array)
                 {
                     MetaArray array = new(child.Name);
                     result.Subcollections.Add(array);
-                    //-foreach(var subobj in child.Value.EnumerateArray())
                     foreach(var subobj in child.Value)
                     {
-                        //-JsonElement subchild = (JsonElement) subobj;
                         JToken subchild = (JToken) subobj;
                         var sub = MakeMeta(subchild, "");
                         array.CollectionKeyID = sub.__collectionid;
@@ -133,21 +120,9 @@ namespace Vespa.Db
                     }
                 }
                 else
-                //-if (child.Value.ValueKind == JsonValueKind.Object)
                 if (child.Value.Type == JTokenType.Object)
                 {
                     var sub = MakeMeta(child.Value, child.Name);
-                    /*~
-                    if (sub.__collectionid.Length > 0)
-                    {
-                        MetaArray array = new(result, child.Name);
-                        result.Subcollections.Add(array);
-                        //~sub.Parent = array; // reassing parent to the MetaArray object
-                        array.CollectionKeyID = sub.__collectionid;
-                        array.SubMeta = sub;
-                    }
-                    else
-                    */
                     result.Subobjects.Add(sub);
                 }
             }
@@ -175,8 +150,7 @@ namespace Vespa.Db
                         s += ",";
                         else
                         s += reader.GetString(i)+",";
-                    //System.Console.WriteLine($"... record# {rowCount}: {s}");
-		    System.Console.WriteLine(s);
+                    System.Console.WriteLine($"... record# {rowCount}: {s}");
                 }
                 Process(reader, ref root);
                 rowCount++;
