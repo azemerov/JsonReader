@@ -58,6 +58,7 @@ namespace Vespa.Db
         public List<Meta> Subobjects;
         public List<MetaArray> Subcollections;
         public string __collectionid = ""; //used only during MakeMeta as a temporary holder
+        protected Dictionary<string,string> columnRefs;
         int rowCount;
         public int RowCount { get { return rowCount; }}
 
@@ -67,6 +68,7 @@ namespace Vespa.Db
             Mappings = new();
             Subobjects = new();
             Subcollections = new();
+            columnRefs = null; // will be set only on the topmost Meta object
         }
 
         static public Meta MakeMeta(string metaDataStr)
@@ -88,7 +90,24 @@ namespace Vespa.Db
                 meta = Meta.MakeMeta(json, "");
             }
             meta = new MetaArray("roots", meta); // wrap into collection
+
+            int idx = 0;
+            meta.columnRefs = new();
+            meta.CollectColumns(meta.columnRefs, ref idx);
+            
             return meta;
+        }
+
+        public string MakeSelect()
+        {
+            if (columnRefs != null)
+            {
+                string result = "";
+                foreach(var exprCol in columnRefs)
+                    result += $" {exprCol.Key} as {exprCol.Value},";
+                return result.TrimEnd(',');
+            }
+            return "";
         }
 
         static protected Meta MakeMeta(JToken element, string name)
@@ -129,6 +148,20 @@ namespace Vespa.Db
             return result;
         }
 
+        public virtual void CollectColumns(Dictionary<string, string> columnRefs, ref int idx)
+        {
+            foreach(var map in Mappings)
+                if (!columnRefs.ContainsKey(map.Expression))
+                {
+                    columnRefs[map.Expression] = $"C{idx}";
+                    idx ++;
+                }
+            foreach(var child in Subobjects)
+                child.CollectColumns(columnRefs, ref idx);
+            foreach(var col in Subcollections)
+                col.CollectColumns(columnRefs, ref idx);
+        }
+
         protected internal virtual void ResetCollectionIDs()
         {
             foreach(var child in Subobjects)
@@ -137,7 +170,7 @@ namespace Vespa.Db
                 child.ResetCollectionIDs();
         }
 
-        public JObject ConstructJson(IDataReader reader)
+        public JObject ConstructJson(IDataReader reader, bool useAutoColumn=false)
         {
             JObject root = new JObject();
             rowCount = 0;
@@ -152,14 +185,20 @@ namespace Vespa.Db
                         s += reader.GetString(i)+",";
                     System.Console.WriteLine($"... record# {rowCount}: {s}");
                 }
-                Process(reader, ref root);
+                if (useAutoColumn)
+                    Process(reader, ref root, columnRefs);
+                else
+                    Process(reader, ref root, null);
                 rowCount++;
             }
             return root;
         }
 
-        static protected internal int ColumnIndex(IDataReader rs, string columnName)
+        static protected internal int ColumnIndex(IDataReader rs, string columnName, Dictionary<string,string> columnRefs)
         {
+            if (columnRefs != null)
+                columnName = columnRefs[columnName];
+
             for (int i=0; i<rs.FieldCount; i++)
                 if (rs.GetName(i).Equals(columnName))
                     return i;
@@ -179,14 +218,14 @@ namespace Vespa.Db
                 return defaultValue;
         }
 
-        protected internal virtual void Process(IDataReader rs, ref JObject result)
+        protected internal virtual void Process(IDataReader rs, ref JObject result, Dictionary<string,string> columnRefs)
         {
             //System.Console.WriteLine($"    Process(object) {this.Name}");
 
             if (result.Count==0) // optimization - not yet loaded
                 foreach(var map in Mappings)
                 {
-                    var idx = ColumnIndex(rs, map.Expression);
+                    var idx = ColumnIndex(rs, map.Expression, columnRefs);
                     if (idx > -1)
                     {
                         var val = rs.GetValue(idx);
@@ -215,11 +254,11 @@ namespace Vespa.Db
                 else
                     subObj = (JObject) token;
                 
-                sub.Process(rs, ref subObj);
+                sub.Process(rs, ref subObj, columnRefs);
             }
 
             foreach(var coll in Subcollections)
-                coll.Process(rs, ref result);
+                coll.Process(rs, ref result, columnRefs);
         }
     }
 
@@ -249,7 +288,17 @@ namespace Vespa.Db
             SubMeta.ResetCollectionIDs();
         }
 
-        protected internal override void Process(IDataReader rs, ref JObject result)
+        public override void CollectColumns(Dictionary<string, string> columnRefs, ref int idx)
+        {
+            if (!columnRefs.ContainsKey(CollectionKeyID))
+            {
+                columnRefs[CollectionKeyID] = $"C{idx}";
+                idx ++;
+            }
+            SubMeta.CollectColumns(columnRefs, ref idx);
+        }
+
+        protected internal override void Process(IDataReader rs, ref JObject result, Dictionary<string,string> columnRefs)
         {
             //System.Console.WriteLine($"    Process(array) {this.Name}");
 
@@ -264,7 +313,7 @@ namespace Vespa.Db
                 array = (JArray) token;
 
             if (CollectionKeyIndex == -1)
-                CollectionKeyIndex = ColumnIndex(rs, CollectionKeyID);
+                CollectionKeyIndex = ColumnIndex(rs, CollectionKeyID, columnRefs);
  
             string keyValue;
             keyValue = GetString(rs, CollectionKeyIndex, "");
@@ -277,7 +326,7 @@ namespace Vespa.Db
                 array.Add(currentItem);
             }
             if (currentItem != null)
-                SubMeta.Process(rs, ref currentItem);
+                SubMeta.Process(rs, ref currentItem, columnRefs);
 
         }
     } 

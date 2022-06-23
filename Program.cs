@@ -78,7 +78,7 @@ namespace JsonTest
             List<string> dataLines = new List<string>(dataStr.Replace("\r", "").Split('\n'));
             var meta = Meta.MakeMeta(metaStr);
             reader = new CSVDataReader(new ListReader(dataLines), ',', true);
-            object root = meta.ConstructJson(reader);
+            object root = meta.ConstructJson(reader, false);
             reader.Close();
             reader.Dispose();
             if (print)
@@ -86,12 +86,17 @@ namespace JsonTest
             return meta.RowCount;
         }
 
-        static int OracleTest(OracleConnection connection, string metadataStr, string sql, bool print)
+        static int OracleTest(OracleConnection connection, string metadataStr, string sql, bool useAutoColumns, bool print)
         {
+            var meta = Meta.MakeMeta(metadataStr);
+            if (useAutoColumns)
+            {
+                var s = meta.MakeSelect();
+                sql = sql.Replace("{}", s);
+            }
             using var cmd = new OracleCommand(sql, connection);
             using IDataReader reader = cmd.ExecuteReader();
-            var meta = Meta.MakeMeta(metadataStr);
-            object root = meta.ConstructJson(reader);
+            object root = meta.ConstructJson(reader, useAutoColumns);
             reader.Close();
             if (print)
                 Console.WriteLine(root.ToString());
@@ -122,7 +127,28 @@ from ATA_CHAPTER C left join ATA_CHAPTER_MTX_FLAG CF on CF.ATA_ID=C.ATA_ID left 
 /*where C.ata_id in ('167CCD91-2081-11D4-B30E-0008C7E97D95','167CCD6C-2081-11D4-B30E-0008C7E97D95')
 */order by c.ata_id, CF.id, s.sub_ata_id";
 
-            return OracleTest(connection, metaStr, sql, print);
+            metaStr = 
+@"{
+    '$collectionid': 'C.ATA_ID',
+    'ata_id': 'C.ATA_ID',
+    'chapter_name': 'C.DESCRIPTION',
+    'ata_flags': {
+        'has_oil_svc_yn': 'CF.has_oil_svc_yn',
+        'is_oil_svc_yn': 'CF.is_rii_item_yn'
+    },
+    'sub_atas': [{
+        '$collectionid': 's.SUB_ATA_ID',
+        'id': 's.SUB_ATA_ID',
+        'sub_chapter_name': 'S.DESCRIPTION'
+    }]
+}";
+sql=
+@"select {} 
+from ATA_CHAPTER C left join ATA_CHAPTER_MTX_FLAG CF on CF.ATA_ID=C.ATA_ID left join ATA_SUB_CHAPTER S on S.ATA_ID=C.ATA_ID
+/*where C.ata_id in ('167CCD91-2081-11D4-B30E-0008C7E97D95','167CCD6C-2081-11D4-B30E-0008C7E97D95')
+*/order by c.ata_id, CF.id, s.sub_ata_id";
+
+            return OracleTest(connection, metaStr, sql, true, print);
         }
 
         static int OracleStationTest(OracleConnection connection, bool print)
@@ -148,21 +174,47 @@ from ATA_CHAPTER C left join ATA_CHAPTER_MTX_FLAG CF on CF.ATA_ID=C.ATA_ID left 
 }";
 
             var sql = 
-@"select s.id, s.airport_identifier, p.stock_point_id, p.stock_point, p.company_code, p.description stock_point_description, h.shop_id, h.description shop_description from station s
+@"select s.id, s.airport_identifier, p.stock_point_id, p.stock_point, p.company_code, p.description stock_point_description, h.shop_id, h.description shop_description
+from station s
+left join stock_point p on p.station_id=s.id
+left join SHOP h on h.station_id=s.id
+/*where s.id in ('2','22') */
+order by s.id, p.stock_point_id, h.shop_id";
+metaStr = 
+@"{
+    '$collectionid': 's.ID',
+    'id': 's.ID',
+    'airport': 's.AIRPORT_IDENTIFIER',
+    'stock_points': [{
+        '$collectionid': 'p.STOCK_POINT_ID',
+        'id': 'p.STOCK_POINT_ID',
+        'sp': 'p.STOCK_POINT',
+        'company': 'p.COMPANY_CODE',
+        'name': 'p.DESCRIPTION'
+    }],
+    'shops': [{
+        '$collectionid': 'h.SHOP_ID',
+        'id': 'h.SHOP_ID',
+        'name': 'h.DESCRIPTION'
+    }]
+}";
+sql = 
+@"select {}
+from station s
 left join stock_point p on p.station_id=s.id
 left join SHOP h on h.station_id=s.id
 /*where s.id in ('2','22') */
 order by s.id, p.stock_point_id, h.shop_id";
 
-            return OracleTest(connection, metaStr, sql, print);
+            return OracleTest(connection, metaStr, sql, true, print);
         }
 
         static bool DO_PRINT = false;
         static void Main(string[] args)
         {
             string connectionStr = "";
-            if (System.IO.File.Exists(@".program"))
-                foreach(var line in System.IO.File.ReadAllLines(@".program"))
+            if (System.IO.File.Exists(@".JsonTest"))
+                foreach(var line in System.IO.File.ReadAllLines(@".JsonTest"))
                     if (line.StartsWith("connection="))
                         connectionStr = line.Substring(11);
                 
