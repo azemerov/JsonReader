@@ -75,7 +75,7 @@ namespace JsonTest
 
             IDataReader reader;
             List<string> dataLines = new List<string>(dataStr.Replace("\r", "").Split('\n'));
-            var meta = Meta.MakeMeta(metaStr);
+            var meta = Meta.MakeMeta(metaStr, "myCollection");
             reader = new CSVDataReader(new ListReader(dataLines), ',', true);
             object root = meta.ConstructJson(reader, true, false);
             reader.Close();
@@ -156,6 +156,43 @@ order by s.id, p.stock_point_id, h.shop_id";
             return OracleTest(connection, metaStr, sql, true, print);
         }
 
+        static int DepartmentTest(OracleConnection connection, bool print)
+        {
+            var metaStr = 
+@"
+    {
+    'department_id': {$collectionid: 'id'},
+     'company_code': 'company_code',
+     'active_yn': {$bool: 'active_yn'},
+     'description': 'department_name',
+     'right_code': 'department_right_code',
+     'event_group_code': 'event_group_code'
+    }
+        ";
+        
+    var sql = 
+@"
+select 
+d.id,
+d.company_code,
+d.active_yn ,
+d.department_name,
+d.DEPARTMENT_RIGHT_CODE,
+case 
+when eg.code is not null
+then '['||eg.code||']'||et.code 
+else
+null
+end event_group_code
+from department d
+left join event_template et on d.MERCURY_EVENT_CODE=et.ID
+left join event_group eg on eg.id=et.GROUP_ID
+where company_code='AE'
+order by d.DEPARTMENT_NAME
+";
+            return OracleTest(connection, metaStr, sql, false, print);
+        }
+
         static bool DO_PRINT = false;
         static void Main(string[] args)
         {
@@ -167,6 +204,7 @@ order by s.id, p.stock_point_id, h.shop_id";
                 
             bool memoryTest = false;
             bool stationTest = false;
+            bool departmentTest = false;
             bool ataTest = false;
             foreach(var a in args)
                 if      (a.Equals("p")) DO_PRINT = true;
@@ -174,6 +212,7 @@ order by s.id, p.stock_point_id, h.shop_id";
                 else if (a.Equals("M")) memoryTest = true;
                 else if (a.Equals("S")) stationTest = true;
                 else if (a.Equals("A")) ataTest = true;
+                else if (a.Equals("D")) departmentTest = true;
 
             //TestJObject();
 
@@ -181,7 +220,7 @@ order by s.id, p.stock_point_id, h.shop_id";
                 // demonstrates sub-object and two parallel collections without Oracle connection
                 wrap("InMemoryTest", InMemoryTest);
 
-            if (stationTest || ataTest)
+            if (stationTest || ataTest || departmentTest)
             {
                 if (connectionStr.Equals(""))
                 {
@@ -198,6 +237,9 @@ order by s.id, p.stock_point_id, h.shop_id";
                 if (ataTest)
                     // demonstrates two parallel sub-collections
                     wrap(connection, "OracleATATest", OracleATATest);
+                if (departmentTest)
+                    // demonstrates two parallel sub-collections
+                    wrap(connection, "YOTest", DepartmentTest);
             }
         }
 

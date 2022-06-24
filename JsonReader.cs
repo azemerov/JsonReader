@@ -81,7 +81,7 @@ namespace Vespa.Db
             columnRefs = null; // will be set only on the topmost Meta object
         }
 
-        static public Meta MakeMeta(string metaDataStr)
+        static public Meta MakeMeta(string metaDataStr, string rootName="roots")
         {
             var metaDoc = JObject.Parse(metaDataStr);
             JToken json = metaDoc.Root;
@@ -99,10 +99,11 @@ namespace Vespa.Db
             {
                 meta = Meta.MakeMeta(json, "");
             }
-            meta = new MetaArray("roots", meta); // wrap into collection
+
+            meta = new MetaArray(rootName, meta); // wrap into collection
 
             int idx = 0;
-            meta.columnRefs = new();
+            meta.columnRefs = new(StringComparer.OrdinalIgnoreCase);
             meta.CollectColumns(meta.columnRefs, ref idx);
             
             return meta;
@@ -152,9 +153,8 @@ namespace Vespa.Db
 
                 if (child.Value.Type == JTokenType.String )
                 {
-                    if (isCollectionId) // childName.Equals("$collectionid"))
+                    if (isCollectionId)
                         result.__collectionid = (child.Value.ToString());
-                    //else
                     result.Mappings.Add(new  FieldMap(childName, child.Value.ToString(), function));
                 }
                 else
@@ -203,21 +203,25 @@ namespace Vespa.Db
                 child.ResetCollectionIDs();
         }
 
+        public static string RowString(IDataReader reader)
+        {
+            var s = "";
+            for (int i=0; i<reader.FieldCount; i++ )
+                if (reader.IsDBNull(i))
+                s += ",";
+                else
+                s += reader.GetString(i)+",";
+            return s;
+        }
+
         public JObject ConstructJson(IDataReader reader, bool sorted, bool useAutoColumn=false)
         {
             JObject root = new JObject();
             rowCount = 0;
             while (reader.Read()) {
                 if (trace)
-                {
-                    var s = "";
-                    for (int i=0; i<reader.FieldCount; i++ )
-                        if (reader.IsDBNull(i))
-                        s += ",";
-                        else
-                        s += reader.GetString(i)+",";
-                    System.Console.WriteLine($"... record# {rowCount}: {s}");
-                }
+                    System.Console.WriteLine($"... record# {rowCount}: {RowString(reader)}");
+
                 if (useAutoColumn)
                     Process(reader, ref root, sorted, columnRefs);
                 else
@@ -233,7 +237,7 @@ namespace Vespa.Db
                 columnName = columnRefs[columnName];
 
             for (int i=0; i<rs.FieldCount; i++)
-                if (rs.GetName(i).Equals(columnName))
+                if (rs.GetName(i).Equals(columnName, StringComparison.OrdinalIgnoreCase))
                     return i;
             return -1;
         }
