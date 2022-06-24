@@ -57,26 +57,6 @@ namespace JsonTest
 
             string metaStr = 
 @"{
-    '$collectionid': 'ATA_ID',
-    'ata_id': {$collectionid: 'ATA_ID'},
-    'chapter_name': 'ATA_DESCRIPTION',
-    'ata_flags': {
-        'has_oil_svc_yn': {'$bool': 'ATA_FLAG1'},
-        'is_oil_svc_yn': {'$bool': 'ATA_FLAG2'}
-    },
-    'sub_atas': [{
-        '$collectionid': 'SUB_ATA_ID',
-        'id': 'SUB_ATA_ID',
-        'sub_chapter_name': 'SUB_DESCRIPTION'
-    }],
-    'Items': [{
-        '$collectionid': 'COL2_ID',
-        'id': 'COL2_ID',
-        'name': 'COL2_NAME'
-    }]
-}";
-metaStr = 
-@"{
     'ata_id': {$collectionid: 'ATA_ID'},
     'chapter_name': 'ATA_DESCRIPTION',
     'ata_flags': {
@@ -126,28 +106,6 @@ metaStr =
         {
             string metaStr = 
 @"{
-    '$collectionid': 'ATA_ID',
-    'ata_id': 'ATA_ID',
-    'chapter_name': 'ATA_DESCRIPTION',
-    'ata_flags': {
-        'has_oil_svc_yn': 'ATA_FLAG1',
-        'is_oil_svc_yn': 'ATA_FLAG2'
-    },
-    'sub_atas': [{
-        '$collectionid': 'SUB_ATA_ID',
-        'id': 'SUB_ATA_ID',
-        'sub_chapter_name': 'SUB_DESCRIPTION'
-    }]
-}";
-
-            var sql = 
-@"select C.ATA_ID, C.DESCRIPTION ATA_DESCRIPTION, CF.has_oil_svc_yn  ata_flag1, CF.is_rii_item_yn ata_flag2, S.sub_ata_id, S.description SUB_DESCRIPTION 
-from ATA_CHAPTER C left join ATA_CHAPTER_MTX_FLAG CF on CF.ATA_ID=C.ATA_ID left join ATA_SUB_CHAPTER S on S.ATA_ID=C.ATA_ID
-/*where C.ata_id in ('167CCD91-2081-11D4-B30E-0008C7E97D95','167CCD6C-2081-11D4-B30E-0008C7E97D95')
-*/order by c.ata_id, CF.id, s.sub_ata_id";
-
-            metaStr = 
-@"{
     'ata_id': {$collectionid: 'C.ATA_ID'},
     'chapter_name': 'C.DESCRIPTION',
     'ata_flags': {
@@ -159,7 +117,7 @@ from ATA_CHAPTER C left join ATA_CHAPTER_MTX_FLAG CF on CF.ATA_ID=C.ATA_ID left 
         'sub_chapter_name': 'S.DESCRIPTION'
     }]
 }";
-sql=
+            var sql=
 @"select {} 
 from ATA_CHAPTER C left join ATA_CHAPTER_MTX_FLAG CF on CF.ATA_ID=C.ATA_ID left join ATA_SUB_CHAPTER S on S.ATA_ID=C.ATA_ID
 /*where C.ata_id in ('167CCD91-2081-11D4-B30E-0008C7E97D95','167CCD6C-2081-11D4-B30E-0008C7E97D95')
@@ -172,32 +130,6 @@ from ATA_CHAPTER C left join ATA_CHAPTER_MTX_FLAG CF on CF.ATA_ID=C.ATA_ID left 
         {
 
             var metaStr = 
-@"{
-    '$collectionid': 'ID',
-    'id': 'ID',
-    'airport': 'AIRPORT_IDENTIFIER',
-    'stock_points': [{
-        '$collectionid': 'STOCK_POINT_ID',
-        'id': 'STOCK_POINT_ID',
-        'sp': 'STOCK_POINT',
-        'company': 'COMPANY_CODE',
-        'name': 'STOCK_POINT_DESCRIPTION'
-    }],
-    'shops': [{
-        '$collectionid': 'SHOP_ID',
-        'id': 'SHOP_ID',
-        'name': 'SHOP_DESCRIPTION'
-    }]
-}";
-
-            var sql = 
-@"select s.id, s.airport_identifier, p.stock_point_id, p.stock_point, p.company_code, p.description stock_point_description, h.shop_id, h.description shop_description
-from station s
-left join stock_point p on p.station_id=s.id
-left join SHOP h on h.station_id=s.id
-/*where s.id in ('2','22') */
-order by s.id, p.stock_point_id, h.shop_id";
-metaStr = 
 @"{
     'id': {$collectionid: 's.ID'},
     'airport': 's.AIRPORT_IDENTIFIER',
@@ -213,7 +145,7 @@ metaStr =
         'name': 'h.DESCRIPTION'
     }]
 }";
-sql = 
+            var sql = 
 @"select {}
 from station s
 left join stock_point p on p.station_id=s.id
