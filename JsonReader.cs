@@ -8,33 +8,32 @@
 * Metadata should be described like 
 *
 *  {
-*      '$collectionid': 'ID',
-*      'Id':  'ID',
+*      'Id':  {$collectionid: 'ID'},
 *      'Name': 'ATA_DESCRIPTION',
 *      'Address': {
 *          'Street': 'ADDRESS_STREET',
 *          'City':    'ADDRESS_CITY'
 *      },
 *      'Previous addresses': [{
-*          '$collectionid': 'ADDRESS_ID',
-*          'Id':            'ADDRESS_ID',
+*          'Id':            {$collectionid: 'ADDRESS_ID'},
 *          'From':          'ADDRESS_START_DATE',
 *          'Till':          'ADDRESS_END_DATE',
 *          'Street':        'ADDRESS_STREET',
 *          'City':          'ADDRESS_CITY'
 *      }],
 *      'Jobs': [{
-*          '$collectionid': 'JOB_ID',
-*          'Id':            'JOB_ID',
+*          'Id':            {$collectionid: 'JOB_ID'},
 *          'From':          'JOB_START_DATE',
 *          'Till':          'JOB_END_DATE',
-*          'Position':      'JOB_POSITION'
+*          'Position':      'JOB_POSITION',
+           'IsCurrent':     {'$bool': 'JOB_IS_CURRENT'}
 *      }]
 *  }
 *
 */
 
 using Newtonsoft.Json.Linq;
+using System;
 using System.Collections.Generic;
 using System.Data;
 
@@ -44,12 +43,23 @@ namespace Vespa.Db
     {
         public string Name;
         public string Expression;
-        public FieldMap(string name, string expression)
+        public Func<object, object> Function;
+        public FieldMap(string name, string expression, Func<object, object> function)
         {
             Name = name;
             Expression = expression;
+            Function = function;
         }
     }
+
+    public class Functions
+    {
+        public static object AsBoolean(object value)
+        {
+            return value.Equals("Y") || value.Equals("y") || value.Equals(1);
+        }
+    }
+
     public class Meta
     {
         public static bool trace = false;
@@ -117,17 +127,40 @@ namespace Vespa.Db
             foreach (var child_ in element)
             {
                 JProperty child = (JProperty) child_;
+                string childName = child.Name;
+                Func<object, object> function = null;
+                bool isCollectionId = false;
+
+                if (child.Value.Type == JTokenType.Object)
+                    foreach(var subchild_ in child.Value)
+                    if (subchild_.Type == JTokenType.Property)
+                    {
+                        JProperty subchild = (JProperty) subchild_;
+                        if (subchild.Name.Equals("$collectionid") )
+                        {
+                            isCollectionId = true;
+                            child = subchild;
+                        }
+                        else
+                        if (subchild.Name.Equals("$bool") )
+                        {
+                            function =Functions.AsBoolean;
+                            child = subchild;
+                        }
+                        break;
+                    }
+
                 if (child.Value.Type == JTokenType.String )
                 {
-                    if (child.Name.Equals("$collectionid"))
+                    if (isCollectionId) // childName.Equals("$collectionid"))
                         result.__collectionid = (child.Value.ToString());
-                    else
-                        result.Mappings.Add(new  FieldMap(child.Name, child.Value.ToString()));
+                    //else
+                    result.Mappings.Add(new  FieldMap(childName, child.Value.ToString(), function));
                 }
                 else
                 if (child.Value.Type == JTokenType.Array)
                 {
-                    MetaArray array = new(child.Name);
+                    MetaArray array = new(childName);
                     result.Subcollections.Add(array);
                     foreach(var subobj in child.Value)
                     {
@@ -141,7 +174,7 @@ namespace Vespa.Db
                 else
                 if (child.Value.Type == JTokenType.Object)
                 {
-                    var sub = MakeMeta(child.Value, child.Name);
+                    var sub = MakeMeta(child.Value, childName);
                     result.Subobjects.Add(sub);
                 }
             }
@@ -170,7 +203,7 @@ namespace Vespa.Db
                 child.ResetCollectionIDs();
         }
 
-        public JObject ConstructJson(IDataReader reader, bool useAutoColumn=false)
+        public JObject ConstructJson(IDataReader reader, bool sorted, bool useAutoColumn=false)
         {
             JObject root = new JObject();
             rowCount = 0;
@@ -186,9 +219,9 @@ namespace Vespa.Db
                     System.Console.WriteLine($"... record# {rowCount}: {s}");
                 }
                 if (useAutoColumn)
-                    Process(reader, ref root, columnRefs);
+                    Process(reader, ref root, sorted, columnRefs);
                 else
-                    Process(reader, ref root, null);
+                    Process(reader, ref root, sorted, null);
                 rowCount++;
             }
             return root;
@@ -218,7 +251,7 @@ namespace Vespa.Db
                 return defaultValue;
         }
 
-        protected internal virtual void Process(IDataReader rs, ref JObject result, Dictionary<string,string> columnRefs)
+        protected internal virtual void Process(IDataReader rs, ref JObject result, bool sorted, Dictionary<string,string> columnRefs)
         {
             //System.Console.WriteLine($"    Process(object) {this.Name}");
 
@@ -229,6 +262,9 @@ namespace Vespa.Db
                     if (idx > -1)
                     {
                         var val = rs.GetValue(idx);
+                        if (map.Function != null)
+                            val = map.Function(val);
+
                         if (val != null)
                         {
                             JToken t;
@@ -254,11 +290,11 @@ namespace Vespa.Db
                 else
                     subObj = (JObject) token;
                 
-                sub.Process(rs, ref subObj, columnRefs);
+                sub.Process(rs, ref subObj, sorted, columnRefs);
             }
 
             foreach(var coll in Subcollections)
-                coll.Process(rs, ref result, columnRefs);
+                coll.Process(rs, ref result, sorted, columnRefs);
         }
     }
 
@@ -266,7 +302,8 @@ namespace Vespa.Db
     {
         public string CollectionKeyID;    // key column name
         public int CollectionKeyIndex;    // key column index
-        public string CollectionKeyValue; // key column value
+        public SortedSet<string> CollectionKeyValues; // used for non-sorted recordsets
+        public string CollectionKeyValue; // key column value, used for sorted recordsets
         public Meta SubMeta;
         JObject currentItem = null;
 
@@ -274,6 +311,7 @@ namespace Vespa.Db
         {
             CollectionKeyIndex = -1;
             CollectionKeyValue = "";
+            CollectionKeyValues = new();
             if (subItem==null)
                 CollectionKeyID = "";
             else
@@ -285,6 +323,7 @@ namespace Vespa.Db
         {
             currentItem = null;
             CollectionKeyValue = "";
+            CollectionKeyValues.Clear();
             SubMeta.ResetCollectionIDs();
         }
 
@@ -298,7 +337,7 @@ namespace Vespa.Db
             SubMeta.CollectColumns(columnRefs, ref idx);
         }
 
-        protected internal override void Process(IDataReader rs, ref JObject result, Dictionary<string,string> columnRefs)
+        protected internal override void Process(IDataReader rs, ref JObject result, bool sorted, Dictionary<string,string> columnRefs)
         {
             //System.Console.WriteLine($"    Process(array) {this.Name}");
 
@@ -318,15 +357,24 @@ namespace Vespa.Db
             string keyValue;
             keyValue = GetString(rs, CollectionKeyIndex, "");
             //System.Console.WriteLine($"... KEY {CollectionKeyID} = {keyValue}");
-            if (!keyValue.Equals(CollectionKeyValue))
+            if (keyValue.Equals("")) return;
+
+            if (
+                (!sorted && !CollectionKeyValues.Contains(keyValue))
+                ||
+                (sorted && keyValue.CompareTo(CollectionKeyValue) > 0)
+            )
             {
-                ResetCollectionIDs();
-                CollectionKeyValue = keyValue;
+                SubMeta.ResetCollectionIDs();
+                if (sorted)
+                    CollectionKeyValue = keyValue;
+                else
+                    CollectionKeyValues.Add(keyValue);
                 currentItem = new JObject();
                 array.Add(currentItem);
             }
             if (currentItem != null)
-                SubMeta.Process(rs, ref currentItem, columnRefs);
+                SubMeta.Process(rs, ref currentItem, sorted, columnRefs);
 
         }
     } 

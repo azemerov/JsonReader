@@ -49,18 +49,20 @@ namespace JsonTest
             string dataStr = 
 @"ATA_ID,ATA_DESCRIPTION,ATA_FLAG1,ATA_FLAG2,SUB_ATA_ID,SUB_DESCRIPTION,COL2_ID,COL2_NAME
 01,ATA 01,Y,N,001,SUB ATA 0101,1,C11
+01,ATA 01,Y,N,001,SUB ATA 0101,2,C12
+01,ATA 01,Y,N,002,SUB ATA 0102,1,C11
 01,ATA 01,Y,N,002,SUB ATA 0102,2,C12
-02,ATA 02,Y,Y,001,SUB ATA 0201,1,C21
-02,ATA 02,Y,Y,002,SUB ATA 0202,2,C22";
+02,ATA 02,Y,Y,001,SUB ATA 0201,3,C23
+02,ATA 02,Y,Y,002,SUB ATA 0202,4,C24";
 
             string metaStr = 
 @"{
     '$collectionid': 'ATA_ID',
-    'ata_id': 'ATA_ID',
+    'ata_id': {$collectionid: 'ATA_ID'},
     'chapter_name': 'ATA_DESCRIPTION',
     'ata_flags': {
-        'has_oil_svc_yn': 'ATA_FLAG1',
-        'is_oil_svc_yn': 'ATA_FLAG2'
+        'has_oil_svc_yn': {'$bool': 'ATA_FLAG1'},
+        'is_oil_svc_yn': {'$bool': 'ATA_FLAG2'}
     },
     'sub_atas': [{
         '$collectionid': 'SUB_ATA_ID',
@@ -73,12 +75,29 @@ namespace JsonTest
         'name': 'COL2_NAME'
     }]
 }";
+metaStr = 
+@"{
+    'ata_id': {$collectionid: 'ATA_ID'},
+    'chapter_name': 'ATA_DESCRIPTION',
+    'ata_flags': {
+        'has_oil_svc_yn': {'$bool': 'ATA_FLAG1'},
+        'is_oil_svc_yn': {'$bool': 'ATA_FLAG2'}
+    },
+    'sub_atas': [{
+        'id': {$collectionid: 'SUB_ATA_ID'},
+        'sub_chapter_name': 'SUB_DESCRIPTION'
+    }],
+    'Items': [{
+        'id': {$collectionid: 'COL2_ID'},
+        'name': 'COL2_NAME'
+    }]
+}";
 
             IDataReader reader;
             List<string> dataLines = new List<string>(dataStr.Replace("\r", "").Split('\n'));
             var meta = Meta.MakeMeta(metaStr);
             reader = new CSVDataReader(new ListReader(dataLines), ',', true);
-            object root = meta.ConstructJson(reader, false);
+            object root = meta.ConstructJson(reader, true, false);
             reader.Close();
             reader.Dispose();
             if (print)
@@ -96,7 +115,7 @@ namespace JsonTest
             }
             using var cmd = new OracleCommand(sql, connection);
             using IDataReader reader = cmd.ExecuteReader();
-            object root = meta.ConstructJson(reader, useAutoColumns);
+            object root = meta.ConstructJson(reader, true, useAutoColumns);
             reader.Close();
             if (print)
                 Console.WriteLine(root.ToString());
@@ -129,16 +148,14 @@ from ATA_CHAPTER C left join ATA_CHAPTER_MTX_FLAG CF on CF.ATA_ID=C.ATA_ID left 
 
             metaStr = 
 @"{
-    '$collectionid': 'C.ATA_ID',
-    'ata_id': 'C.ATA_ID',
+    'ata_id': {$collectionid: 'C.ATA_ID'},
     'chapter_name': 'C.DESCRIPTION',
     'ata_flags': {
         'has_oil_svc_yn': 'CF.has_oil_svc_yn',
         'is_oil_svc_yn': 'CF.is_rii_item_yn'
     },
     'sub_atas': [{
-        '$collectionid': 's.SUB_ATA_ID',
-        'id': 's.SUB_ATA_ID',
+        'id': {$collectionid: 's.SUB_ATA_ID'},
         'sub_chapter_name': 'S.DESCRIPTION'
     }]
 }";
@@ -182,19 +199,17 @@ left join SHOP h on h.station_id=s.id
 order by s.id, p.stock_point_id, h.shop_id";
 metaStr = 
 @"{
-    '$collectionid': 's.ID',
-    'id': 's.ID',
+    'id': {$collectionid: 's.ID'},
     'airport': 's.AIRPORT_IDENTIFIER',
+    'bow_status_cfg': 's.BOW_STATUS_CFG',
     'stock_points': [{
-        '$collectionid': 'p.STOCK_POINT_ID',
-        'id': 'p.STOCK_POINT_ID',
+        'id': {$collectionid: 'p.STOCK_POINT_ID'},
         'sp': 'p.STOCK_POINT',
         'company': 'p.COMPANY_CODE',
         'name': 'p.DESCRIPTION'
     }],
     'shops': [{
-        '$collectionid': 'h.SHOP_ID',
-        'id': 'h.SHOP_ID',
+        'id': {$collectionid: 'h.SHOP_ID'},
         'name': 'h.DESCRIPTION'
     }]
 }";
