@@ -75,7 +75,7 @@ namespace Vespa.Db
 
         static public Meta MakeMeta(JObject metaDoc, string rootName="roots")
         {
-            JToken json = metaDoc.Root;
+            JToken json = metaDoc;
             Meta meta = null;
             if (json.Type == JTokenType.Array )
             {
@@ -104,31 +104,6 @@ namespace Vespa.Db
         {
             var metaDoc = JObject.Parse(metaDataStr);
             return MakeMeta(metaDoc, rootName);
-            /*
-            JToken json = metaDoc.Root;
-            Meta meta = null;
-            if (json.Type == JTokenType.Array )
-            {
-                foreach(var subobj in json)
-                {
-                    JToken subjson = subobj;
-                    meta = Meta.MakeMeta(subjson, "");
-                    break; // we expect only one array item in metadata
-                }
-            }
-            else
-            {
-                meta = Meta.MakeMeta(json, "");
-            }
-
-            meta = new MetaArray(rootName, meta); // wrap into collection
-
-            int idx = 0;
-            meta.columnRefs = new(StringComparer.OrdinalIgnoreCase);
-            meta.CollectColumns(meta.columnRefs, ref idx);
-            
-            return meta;
-            */
         }
 
         public string MakeSelect()

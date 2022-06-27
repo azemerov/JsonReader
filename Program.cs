@@ -75,8 +75,9 @@ namespace JsonTest
             IDataReader reader;
             //List<string> dataLines = new List<string>(dataStr.Replace("\r", "").Split('\n'));
             List<string> dataLines = new List<string>(conf["InMemoryData"].ToString().Replace("\r", "").Split('\n'));
-            var meta = Meta.MakeMeta(metaStr, "myCollection");
-            //var meta = Meta.MakeMeta(conf["InMemoryMeta"], "myCollection");
+            //var meta = Meta.MakeMeta(metaStr, "myCollection");
+            JToken jt = conf["InMemoryMeta"];
+            var meta = Meta.MakeMeta((JObject)jt, "myCollection");
             reader = new CSVDataReader(new ListReader(dataLines), ',', true);
             object root = meta.ConstructJson(reader, true, false);
             reader.Close();
