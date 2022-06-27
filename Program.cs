@@ -42,7 +42,7 @@ namespace JsonTest
             IntrospectJson(root);
         }
 
-        static int InMemoryTest(bool print)
+        static int InMemoryTest()
         {
 string dataStr = 
 @"ATA_ID,ATA_DESCRIPTION,ATA_FLAG1,ATA_FLAG2,SUB_ATA_ID,SUB_DESCRIPTION,COL2_ID,COL2_NAME
@@ -78,12 +78,12 @@ string metaStr =
             object root = meta.ConstructJson(reader, true, false);
             reader.Close();
             reader.Dispose();
-            if (print)
+            if (DO_PRINT)
                 Console.WriteLine(root.ToString());
             return meta.RowCount;
         }
 
-        static int OracleTest(OracleConnection connection, JObject metadata, string sql, bool useAutoColumns, bool print)
+        static int OracleTest(OracleConnection connection, JObject metadata, string sql, bool useAutoColumns)
         {
             var meta = Meta.MakeMeta(metadata);
             if (useAutoColumns)
@@ -95,25 +95,9 @@ string metaStr =
             using IDataReader reader = cmd.ExecuteReader();
             object root = meta.ConstructJson(reader, true, useAutoColumns);
             reader.Close();
-            if (print)
+            if (DO_PRINT)
                 Console.WriteLine(root.ToString());
             return meta.RowCount;
-        }
-
-        static int OracleATATest(OracleConnection connection, bool print)
-        {
-            return OracleTest(connection, (JObject)conf["ATAMeta"], conf["ATAQuery"].ToString(), true, print);
-        }
-
-        static int OracleStationTest(OracleConnection connection, bool print)
-        {
-
-            return OracleTest(connection, (JObject)conf["StationMeta"], conf["StationQuery"].ToString(), true, print);
-        }
-
-        static int DepartmentTest(OracleConnection connection, bool print)
-        {
-            return OracleTest(connection, (JObject)conf["DepartmentMeta"], conf["DepartmentQuery"].ToString(), true, print);
         }
 
         static bool DO_PRINT = false;
@@ -143,8 +127,7 @@ string metaStr =
 
             //TestJObject();
 
-            if (memoryTest)
-                // demonstrates sub-object and two parallel collections without Oracle connection
+            if (memoryTest)                    // demonstrates sub-object and two parallel collections, no SQL used
                 wrap("InMemoryTest", InMemoryTest);
 
             if (stationTest || ataTest || departmentTest)
@@ -157,29 +140,27 @@ string metaStr =
                 using var connection = new OracleConnection(connectionStr);
                 connection.Open();
 
-                if (stationTest)
-                    // demonstrates sub-object and sub-collection
-                    wrap(connection, "OracleStationTest", OracleStationTest);
+                if (stationTest)                // demonstrates sub-object and sub-collection
+                    wrap("OracleStationTest", OracleTest, connection, (JObject)conf["StationMeta"], conf["StationQuery"].ToString(), true);
 
-                if (ataTest)
-                    // demonstrates two parallel sub-collections
-                    wrap(connection, "OracleATATest", OracleATATest);
-                if (departmentTest)
-                    // demonstrates two parallel sub-collections
-                    wrap(connection, "YOTest", DepartmentTest);
+                if (ataTest)                    // demonstrates two parallel sub-collections
+                    wrap("OracleATATest", OracleTest, connection, (JObject)conf["ATAMeta"], conf["ATAQuery"].ToString(), true);
+
+                if (departmentTest)             // demonstrates two parallel sub-collections
+                    wrap("DepartmentTest", OracleTest, connection, (JObject)conf["DepartmentMeta"], conf["DepartmentQuery"].ToString(), false);
             }
         }
 
-        public static void wrap(string name, Func<bool, int> orig)
+        public static void wrap(string name, Func<int> orig)
         {
             System.DateTime started = System.DateTime.Now;
-            int cnt = orig(DO_PRINT);
+            int cnt = orig();
             Console.WriteLine($"{name} cnt={cnt}, elapsed: {System.DateTime.Now.Subtract(started)}");
         } 
-        public static void wrap(OracleConnection connection, string name, Func<OracleConnection, bool, int> orig)
+        public static void wrap(string name, Func<OracleConnection, JObject, string, bool, int> orig, OracleConnection connection, JObject meta, string sql, bool autoColumns)
         {
             System.DateTime started = System.DateTime.Now;
-            int cnt = orig(connection, DO_PRINT);
+            int cnt = orig(connection, meta, sql, autoColumns);
             Console.WriteLine($"{name} cnt={cnt}, elapsed: {System.DateTime.Now.Subtract(started)}");
         } 
     }
