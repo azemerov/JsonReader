@@ -44,8 +44,7 @@ namespace JsonTest
 
         static int InMemoryTest(bool print)
         {
-
-            string dataStr = 
+string dataStr = 
 @"ATA_ID,ATA_DESCRIPTION,ATA_FLAG1,ATA_FLAG2,SUB_ATA_ID,SUB_DESCRIPTION,COL2_ID,COL2_NAME
 01,ATA 01,Y,N,001,SUB ATA 0101,1,C11
 01,ATA 01,Y,N,001,SUB ATA 0101,2,C12
@@ -53,31 +52,28 @@ namespace JsonTest
 01,ATA 01,Y,N,002,SUB ATA 0102,2,C12
 02,ATA 02,Y,Y,001,SUB ATA 0201,3,C23
 02,ATA 02,Y,Y,002,SUB ATA 0202,4,C24";
-
-            string metaStr = 
+string metaStr = 
 @"{
-    'ata_id': {$collectionid: 'ATA_ID'},
-    'chapter_name': 'ATA_DESCRIPTION',
-    'ata_flags': {
-        'has_oil_svc_yn': {'$bool': 'ATA_FLAG1'},
-        'is_oil_svc_yn': {'$bool': 'ATA_FLAG2'}
-    },
-    'sub_atas': [{
-        'id': {$collectionid: 'SUB_ATA_ID'},
-        'sub_chapter_name': 'SUB_DESCRIPTION'
-    }],
-    'Items': [{
-        'id': {$collectionid: 'COL2_ID'},
-        'name': 'COL2_NAME'
-    }]
-}";
-
+        'ata_id': {'$collectionid': 'ATA_ID'},
+        'chapter_name': 'ATA_DESCRIPTION',
+        'ata_flags': {
+            'has_oil_svc_yn': {'$bool': 'ATA_FLAG1'},
+            'is_oil_svc_yn': {'$bool': 'ATA_FLAG2'}
+        },
+        'sub_atas': [{
+            'id': {'$collectionid': 'SUB_ATA_ID'},
+            'sub_chapter_name': 'SUB_DESCRIPTION'
+        }],
+        'Items': [{
+            'id': {'$collectionid': 'COL2_ID'},
+            'name': 'COL2_NAME'
+        }]
+    }";
             IDataReader reader;
-            //List<string> dataLines = new List<string>(dataStr.Replace("\r", "").Split('\n'));
-            List<string> dataLines = new List<string>(conf["InMemoryData"].ToString().Replace("\r", "").Split('\n'));
-            //var meta = Meta.MakeMeta(metaStr, "myCollection");
-            JToken jt = conf["InMemoryMeta"];
-            var meta = Meta.MakeMeta((JObject)jt, "myCollection");
+            List<string> dataLines = new List<string>(dataStr.Replace("\r", "").Split('\n'));
+            //List<string> dataLines = new List<string>(conf["InMemoryData"].ToString().Replace("\r", "").Split('\n'));
+            var meta = Meta.MakeMeta(metaStr, "myCollection");
+            //var meta = Meta.MakeMeta((JObject)conf["InMemoryMeta"], "myCollection");
             reader = new CSVDataReader(new ListReader(dataLines), ',', true);
             object root = meta.ConstructJson(reader, true, false);
             reader.Close();
@@ -87,9 +83,9 @@ namespace JsonTest
             return meta.RowCount;
         }
 
-        static int OracleTest(OracleConnection connection, string metadataStr, string sql, bool useAutoColumns, bool print)
+        static int OracleTest(OracleConnection connection, JObject metadata, string sql, bool useAutoColumns, bool print)
         {
-            var meta = Meta.MakeMeta(metadataStr);
+            var meta = Meta.MakeMeta(metadata);
             if (useAutoColumns)
             {
                 var s = meta.MakeSelect();
@@ -106,93 +102,18 @@ namespace JsonTest
 
         static int OracleATATest(OracleConnection connection, bool print)
         {
-            string metaStr = 
-@"{
-    'ata_id': {$collectionid: 'C.ATA_ID'},
-    'chapter_name': 'C.DESCRIPTION',
-    'ata_flags': {
-        'has_oil_svc_yn': {$bool: 'CF.has_oil_svc_yn'},
-        'is_oil_svc_yn': {$bool: 'CF.is_rii_item_yn'}
-    },
-    'sub_atas': [{
-        'id': {$collectionid: 's.SUB_ATA_ID'},
-        'sub_chapter_name': 'S.DESCRIPTION'
-    }]
-}";
-            var sql=
-@"select {} 
-from ATA_CHAPTER C left join ATA_CHAPTER_MTX_FLAG CF on CF.ATA_ID=C.ATA_ID left join ATA_SUB_CHAPTER S on S.ATA_ID=C.ATA_ID
-/*where C.ata_id in ('167CCD91-2081-11D4-B30E-0008C7E97D95','167CCD6C-2081-11D4-B30E-0008C7E97D95')
-*/order by c.ata_id, CF.id, s.sub_ata_id";
-
-            return OracleTest(connection, metaStr, sql, true, print);
+            return OracleTest(connection, (JObject)conf["ATAMeta"], conf["ATAQuery"].ToString(), true, print);
         }
 
         static int OracleStationTest(OracleConnection connection, bool print)
         {
 
-            var metaStr = 
-@"{
-    'id': {$collectionid: 's.ID'},
-    'airport': 's.AIRPORT_IDENTIFIER',
-    'bow_status_cfg': {$int: 's.BOW_STATUS_CFG'},
-    'stock_points': [{
-        'id': {$collectionid: 'p.STOCK_POINT_ID'},
-        'sp': 'p.STOCK_POINT',
-        'company': 'p.COMPANY_CODE',
-        'name': 'p.DESCRIPTION'
-    }],
-    'shops': [{
-        'id': {$collectionid: 'h.SHOP_ID'},
-        'name': 'h.DESCRIPTION'
-    }]
-}";
-            var sql = 
-@"select {}
-from station s
-left join stock_point p on p.station_id=s.id
-left join SHOP h on h.station_id=s.id
-/*where s.id in ('2','22') */
-order by s.id, p.stock_point_id, h.shop_id";
-
-            return OracleTest(connection, metaStr, sql, true, print);
+            return OracleTest(connection, (JObject)conf["StationMeta"], conf["StationQuery"].ToString(), true, print);
         }
 
         static int DepartmentTest(OracleConnection connection, bool print)
         {
-            var metaStr = 
-@"
-    {
-    'department_id': {$collectionid: 'id'},
-     'company_code': '=',
-     'active_yn': {$bool: '='},
-     'description': '=',
-     'right_code': 'department_right_code',
-     'event_group_code': 'event_group_code'
-    }
-        ";
-        
-    var sql = 
-@"
-select 
-d.id,
-d.company_code,
-d.active_yn ,
-d.department_name,
-d.DEPARTMENT_RIGHT_CODE,
-case 
-when eg.code is not null
-then '['||eg.code||']'||et.code 
-else
-null
-end event_group_code
-from department d
-left join event_template et on d.MERCURY_EVENT_CODE=et.ID
-left join event_group eg on eg.id=et.GROUP_ID
-where company_code='AE'
-order by d.DEPARTMENT_NAME
-";
-            return OracleTest(connection, metaStr, sql, false, print);
+            return OracleTest(connection, (JObject)conf["DepartmentMeta"], conf["DepartmentQuery"].ToString(), true, print);
         }
 
         static bool DO_PRINT = false;
