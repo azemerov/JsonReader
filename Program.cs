@@ -73,8 +73,8 @@ namespace JsonTest
 }";
 
             IDataReader reader;
-            List<string> dataLines = new List<string>(dataStr.Replace("\r", "").Split('\n'));
-            //List<string> dataLines = new List<string>(conf["InMemoryData"].ToString().Replace("\r", "").Split('\n'));
+            //List<string> dataLines = new List<string>(dataStr.Replace("\r", "").Split('\n'));
+            List<string> dataLines = new List<string>(conf["InMemoryData"].ToString().Replace("\r", "").Split('\n'));
             var meta = Meta.MakeMeta(metaStr, "myCollection");
             //var meta = Meta.MakeMeta(conf["InMemoryMeta"], "myCollection");
             reader = new CSVDataReader(new ListReader(dataLines), ',', true);
@@ -199,7 +199,7 @@ order by d.DEPARTMENT_NAME
 
         static void Main(string[] args)
         {
-            conf = JObject.Parse(System.IO.File.ReadAllText("appsettngs.json"));
+            conf = JObject.Parse(System.IO.File.ReadAllText("appsettings.json"));
 
             string connectionStr = "";
             if (System.IO.File.Exists(@".JsonTest"))

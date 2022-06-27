@@ -73,8 +73,9 @@ namespace Vespa.Db
             columnRefs = null; // will be set only on the topmost Meta object
         }
 
-        static public Meta MakeMeta(JToken json, string rootName="roots")
+        static public Meta MakeMeta(JObject metaDoc, string rootName="roots")
         {
+            JToken json = metaDoc.Root;
             Meta meta = null;
             if (json.Type == JTokenType.Array )
             {
@@ -102,8 +103,7 @@ namespace Vespa.Db
         static public Meta MakeMeta(string metaDataStr, string rootName="roots")
         {
             var metaDoc = JObject.Parse(metaDataStr);
-            JToken json = metaDoc.Root;
-            return MakeMeta(json, rootName);
+            return MakeMeta(metaDoc, rootName);
             /*
             JToken json = metaDoc.Root;
             Meta meta = null;
