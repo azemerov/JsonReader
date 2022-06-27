@@ -73,9 +73,38 @@ namespace Vespa.Db
             columnRefs = null; // will be set only on the topmost Meta object
         }
 
+        static public Meta MakeMeta(JToken json, string rootName="roots")
+        {
+            Meta meta = null;
+            if (json.Type == JTokenType.Array )
+            {
+                foreach(var subobj in json)
+                {
+                    JToken subjson = subobj;
+                    meta = Meta.MakeMeta(subjson, "");
+                    break; // we expect only one array item in metadata
+                }
+            }
+            else
+            {
+                meta = Meta.MakeMeta(json, "");
+            }
+
+            meta = new MetaArray(rootName, meta); // wrap into collection
+
+            int idx = 0;
+            meta.columnRefs = new(StringComparer.OrdinalIgnoreCase);
+            meta.CollectColumns(meta.columnRefs, ref idx);
+            
+            return meta;
+        }
+
         static public Meta MakeMeta(string metaDataStr, string rootName="roots")
         {
             var metaDoc = JObject.Parse(metaDataStr);
+            JToken json = metaDoc.Root;
+            return MakeMeta(json, rootName);
+            /*
             JToken json = metaDoc.Root;
             Meta meta = null;
             if (json.Type == JTokenType.Array )
@@ -99,6 +128,7 @@ namespace Vespa.Db
             meta.CollectColumns(meta.columnRefs, ref idx);
             
             return meta;
+            */
         }
 
         public string MakeSelect()
@@ -138,6 +168,11 @@ namespace Vespa.Db
                         if (subchild.Name.Equals("$bool") )
                         {
                             function = (v =>  (v.Equals("Y") || v.Equals("y") || v.Equals(1)));
+                            child = subchild;
+                        }
+                        if (subchild.Name.Equals("$int") )
+                        {
+                            function = (v =>  v is DBNull ? 0 : Convert.ToInt32(v));
                             child = subchild;
                         }
                         break;

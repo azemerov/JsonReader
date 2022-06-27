@@ -74,7 +74,9 @@ namespace JsonTest
 
             IDataReader reader;
             List<string> dataLines = new List<string>(dataStr.Replace("\r", "").Split('\n'));
+            //List<string> dataLines = new List<string>(conf["InMemoryData"].ToString().Replace("\r", "").Split('\n'));
             var meta = Meta.MakeMeta(metaStr, "myCollection");
+            //var meta = Meta.MakeMeta(conf["InMemoryMeta"], "myCollection");
             reader = new CSVDataReader(new ListReader(dataLines), ',', true);
             object root = meta.ConstructJson(reader, true, false);
             reader.Close();
@@ -132,7 +134,7 @@ from ATA_CHAPTER C left join ATA_CHAPTER_MTX_FLAG CF on CF.ATA_ID=C.ATA_ID left 
 @"{
     'id': {$collectionid: 's.ID'},
     'airport': 's.AIRPORT_IDENTIFIER',
-    'bow_status_cfg': 's.BOW_STATUS_CFG',
+    'bow_status_cfg': {$int: 's.BOW_STATUS_CFG'},
     'stock_points': [{
         'id': {$collectionid: 'p.STOCK_POINT_ID'},
         'sp': 'p.STOCK_POINT',
@@ -193,8 +195,12 @@ order by d.DEPARTMENT_NAME
         }
 
         static bool DO_PRINT = false;
+        static JObject conf;
+
         static void Main(string[] args)
         {
+            conf = JObject.Parse(System.IO.File.ReadAllText("appsettngs.json"));
+
             string connectionStr = "";
             if (System.IO.File.Exists(@".JsonTest"))
                 foreach(var line in System.IO.File.ReadAllLines(@".JsonTest"))
