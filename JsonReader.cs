@@ -52,14 +52,6 @@ namespace Vespa.Db
         }
     }
 
-    public class Functions
-    {
-        public static object AsBoolean(object value)
-        {
-            return value.Equals("Y") || value.Equals("y") || value.Equals(1);
-        }
-    }
-
     public class Meta
     {
         public static bool trace = false;
@@ -145,7 +137,7 @@ namespace Vespa.Db
                         else
                         if (subchild.Name.Equals("$bool") )
                         {
-                            function =Functions.AsBoolean;
+                            function = (v =>  (v.Equals("Y") || v.Equals("y") || v.Equals(1)));
                             child = subchild;
                         }
                         break;
@@ -155,7 +147,9 @@ namespace Vespa.Db
                 {
                     if (isCollectionId)
                         result.__collectionid = (child.Value.ToString());
-                    result.Mappings.Add(new  FieldMap(childName, child.Value.ToString(), function));
+                    var childValue = child.Value.ToString();
+                    if (childValue.Equals("=")) childValue = childName;
+                    result.Mappings.Add(new  FieldMap(childName, childValue, function));
                 }
                 else
                 if (child.Value.Type == JTokenType.Array)

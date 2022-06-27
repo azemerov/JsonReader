@@ -6,7 +6,6 @@ using Newtonsoft.Json.Linq;
 using Vespa.Db;
 using Vespa.Data;
 
-
 namespace JsonTest
 {
     class Program
@@ -109,8 +108,8 @@ namespace JsonTest
     'ata_id': {$collectionid: 'C.ATA_ID'},
     'chapter_name': 'C.DESCRIPTION',
     'ata_flags': {
-        'has_oil_svc_yn': 'CF.has_oil_svc_yn',
-        'is_oil_svc_yn': 'CF.is_rii_item_yn'
+        'has_oil_svc_yn': {$bool: 'CF.has_oil_svc_yn'},
+        'is_oil_svc_yn': {$bool: 'CF.is_rii_item_yn'}
     },
     'sub_atas': [{
         'id': {$collectionid: 's.SUB_ATA_ID'},
@@ -162,9 +161,9 @@ order by s.id, p.stock_point_id, h.shop_id";
 @"
     {
     'department_id': {$collectionid: 'id'},
-     'company_code': 'company_code',
-     'active_yn': {$bool: 'active_yn'},
-     'description': 'department_name',
+     'company_code': '=',
+     'active_yn': {$bool: '='},
+     'description': '=',
      'right_code': 'department_right_code',
      'event_group_code': 'event_group_code'
     }
