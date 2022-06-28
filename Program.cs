@@ -11,6 +11,10 @@ namespace JsonTest
     class Program
     {
 
+        protected bool printOut = false;
+        protected OracleConnection connection = null;
+        static JObject conf;
+
         static void IntrospectJson(JToken obj)
         {
             if (obj.Type == JTokenType.Object)
@@ -42,17 +46,9 @@ namespace JsonTest
             IntrospectJson(root);
         }
 
-        static int InMemoryTest()
+        protected int InMemoryTest()
         {
-string dataStr = 
-@"ATA_ID,ATA_DESCRIPTION,ATA_FLAG1,ATA_FLAG2,SUB_ATA_ID,SUB_DESCRIPTION,COL2_ID,COL2_NAME
-01,ATA 01,Y,N,001,SUB ATA 0101,1,C11
-01,ATA 01,Y,N,001,SUB ATA 0101,2,C12
-01,ATA 01,Y,N,002,SUB ATA 0102,1,C11
-01,ATA 01,Y,N,002,SUB ATA 0102,2,C12
-02,ATA 02,Y,Y,001,SUB ATA 0201,3,C23
-02,ATA 02,Y,Y,002,SUB ATA 0202,4,C24";
-string metaStr = 
+            string metaStr = 
 @"{
         'ata_id': {'$collectionid': 'ATA_ID'},
         'chapter_name': 'ATA_DESCRIPTION',
@@ -68,22 +64,23 @@ string metaStr =
             'id': {'$collectionid': 'COL2_ID'},
             'name': 'COL2_NAME'
         }]
-    }";
+}";
             IDataReader reader;
-            List<string> dataLines = new List<string>(dataStr.Replace("\r", "").Split('\n'));
-            //List<string> dataLines = new List<string>(conf["InMemoryData"].ToString().Replace("\r", "").Split('\n'));
+            JArray array = (JArray) conf["InMemoryData"];
+            List<string> dataLines = array.ToObject<List<string>>(); 
+
             var meta = Meta.MakeMeta(metaStr, "myCollection");
             //var meta = Meta.MakeMeta((JObject)conf["InMemoryMeta"], "myCollection");
             reader = new CSVDataReader(new ListReader(dataLines), ',', true);
             object root = meta.ConstructJson(reader, true, false);
             reader.Close();
             reader.Dispose();
-            if (DO_PRINT)
+            if (printOut)
                 Console.WriteLine(root.ToString());
             return meta.RowCount;
         }
 
-        static int OracleTest(OracleConnection connection, JObject metadata, string sql, bool useAutoColumns)
+        protected int OracleTest(JObject metadata, string sql, bool useAutoColumns)
         {
             var meta = Meta.MakeMeta(metadata);
             if (useAutoColumns)
@@ -95,13 +92,10 @@ string metaStr =
             using IDataReader reader = cmd.ExecuteReader();
             object root = meta.ConstructJson(reader, true, useAutoColumns);
             reader.Close();
-            if (DO_PRINT)
+            if (printOut)
                 Console.WriteLine(root.ToString());
             return meta.RowCount;
         }
-
-        static bool DO_PRINT = false;
-        static JObject conf;
 
         static void Main(string[] args)
         {
@@ -112,13 +106,15 @@ string metaStr =
                 foreach(var line in System.IO.File.ReadAllLines(@".JsonTest"))
                     if (line.StartsWith("connection="))
                         connectionStr = line.Substring(11);
-                
+            
+            Program program = new();
+
             bool memoryTest = false;
             bool stationTest = false;
             bool departmentTest = false;
             bool ataTest = false;
             foreach(var a in args)
-                if      (a.Equals("p")) DO_PRINT = true;
+                if      (a.Equals("p")) program.printOut = true;
                 else if (a.Equals("t")) Meta.trace = true;
                 else if (a.Equals("M")) memoryTest = true;
                 else if (a.Equals("S")) stationTest = true;
@@ -128,7 +124,7 @@ string metaStr =
             //TestJObject();
 
             if (memoryTest)                    // demonstrates sub-object and two parallel collections, no SQL used
-                wrap("InMemoryTest", InMemoryTest);
+                program.wrap("InMemoryTest", program.InMemoryTest);
 
             if (stationTest || ataTest || departmentTest)
             {
@@ -137,30 +133,33 @@ string metaStr =
                     Console.WriteLine("have no connection string available, use .program file");
                     return;
                 }
-                using var connection = new OracleConnection(connectionStr);
-                connection.Open();
+                program.connection = new OracleConnection(connectionStr);
+                program.connection.Open();
 
                 if (stationTest)                // demonstrates sub-object and sub-collection
-                    wrap("OracleStationTest", OracleTest, connection, (JObject)conf["StationMeta"], conf["StationQuery"].ToString(), true);
+                    program.wrap("OracleStationTest", program.OracleTest, (JObject)conf["StationMeta"], conf["StationQuery"].ToString(), true);
 
                 if (ataTest)                    // demonstrates two parallel sub-collections
-                    wrap("OracleATATest", OracleTest, connection, (JObject)conf["ATAMeta"], conf["ATAQuery"].ToString(), true);
+                    program.wrap("OracleATATest", program.OracleTest, (JObject)conf["ATAMeta"], conf["ATAQuery"].ToString(), true);
 
                 if (departmentTest)             // demonstrates two parallel sub-collections
-                    wrap("DepartmentTest", OracleTest, connection, (JObject)conf["DepartmentMeta"], conf["DepartmentQuery"].ToString(), false);
+                    program.wrap("DepartmentTest", program.OracleTest, (JObject)conf["DepartmentMeta"], conf["DepartmentQuery"].ToString(), false);
+
+                program.connection.Close();
+                program.connection.Dispose();
             }
         }
 
-        public static void wrap(string name, Func<int> orig)
+        public void wrap(string name, Func<int> orig)
         {
             System.DateTime started = System.DateTime.Now;
             int cnt = orig();
             Console.WriteLine($"{name} cnt={cnt}, elapsed: {System.DateTime.Now.Subtract(started)}");
         } 
-        public static void wrap(string name, Func<OracleConnection, JObject, string, bool, int> orig, OracleConnection connection, JObject meta, string sql, bool autoColumns)
+        public void wrap(string name, Func<JObject, string, bool, int> orig, JObject meta, string sql, bool autoColumns)
         {
             System.DateTime started = System.DateTime.Now;
-            int cnt = orig(connection, meta, sql, autoColumns);
+            int cnt = orig(meta, sql, autoColumns);
             Console.WriteLine($"{name} cnt={cnt}, elapsed: {System.DateTime.Now.Subtract(started)}");
         } 
     }
