@@ -150,6 +150,17 @@ namespace Vespa.Db
                             function = (v =>  v is DBNull ? 0 : Convert.ToInt32(v));
                             child = subchild;
                         }
+                        if (subchild.Name.Equals("$str") )
+                        {
+                            function = (v =>  v is DBNull ? "" : Convert.ToString(v));
+                            child = subchild;
+                        }
+                        if (subchild.Name.StartsWith("$str:") )
+                        {
+                            var format = subchild.Name.Substring(5);
+                            function = (v =>  v is DBNull ? "" : v is DateTime ? ((DateTime)v).ToString(format) : v.ToString());
+                            child = subchild;
+                        }
                         break;
                     }
 
