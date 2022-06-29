@@ -196,6 +196,84 @@ namespace Vespa.Db
             return result;
         }
 
+        public virtual Meta ChildByName(string name)
+        {
+            foreach (var sub in Subobjects)
+                if(sub.Name.Equals(name)) return sub;
+            foreach (var sub in Subcollections)
+                if(sub.Name.Equals(name)) return sub;
+            return null;
+        }
+
+        static public Meta MakeMeta(IDataReader reader, string name)
+        {
+            Meta result = new(name);
+            for (int i=0; i<reader.FieldCount; i++)
+            {
+                var fullName = reader.GetName(i);
+                var cname = fullName;
+                string fname = "";
+                string caction = "";
+                if (cname.StartsWith('(') && cname.Contains(')'))
+                {
+                    var vals =cname.Split(')');
+                    caction = vals[0].Substring(1);
+                    cname = vals[1];
+                }
+                if (cname.Contains(':'))
+                {
+                    var vals =cname.Split(':');
+                    cname = vals[0];
+                    fname = vals[1];
+                }
+
+                var names = cname.Split('.');
+                var current = result;
+                for (int j=0; j<names.Length-1; j++)
+                {
+                    var n = current.ChildByName(names[j]);
+                    if (n==null)
+                    {
+                        if (caction.Equals("array"))
+                        {
+                            var sub = new Meta(names[j]);
+                            sub.__collectionid = fullName;
+                            current.Subcollections.Add(new MetaArray(names[j], sub));
+                            current = sub;
+                        }
+                        else
+                        {
+                            n = new Meta(names[j]);
+                            current.Subobjects.Add(n);
+                            current = n;
+                        }
+                    }
+                    else if (n is MetaArray)
+                        current = ((MetaArray)n).SubMeta;
+                    else
+                        current = n;
+                }
+
+                Func<object,object> function = null;
+                if (fname.Equals("bool") )
+                    function = (v =>  (v.Equals("Y") || v.Equals("y") || v.Equals(1)));
+                if (fname.Equals("int") )
+                    function = (v =>  v is DBNull ? 0 : Convert.ToInt32(v));
+                if (fname.Equals("str") )
+                    function = (v =>  v is DBNull ? "" : Convert.ToString(v));
+                if (fname.StartsWith("str-") )
+                {
+                    var format = fname.Substring(5);
+                    function = (v =>  v is DBNull ? "" : v is DateTime ? ((DateTime)v).ToString(format) : v.ToString());
+                }
+
+                current.Mappings.Add(new FieldMap(names[names.Length-1], fullName, function));
+                
+            }
+
+            return result;
+        }
+
         public virtual void CollectColumns(Dictionary<string, string> columnRefs, ref int idx)
         {
             foreach(var map in Mappings)
@@ -337,6 +415,25 @@ namespace Vespa.Db
                 CollectionKeyID = subItem.__collectionid;
             SubMeta = subItem;
         }
+
+        public override Meta ChildByName(string name)
+        {
+            if (SubMeta.Name.Equals(name))
+                return SubMeta;
+            return null;
+        }
+        /*
+        public override Meta FindByName(string name, string action)
+        {
+            var names = name.Split('.', 2);
+            if (name.Length==0)
+                return null;
+            if (Name==names[0])
+                return this;
+            var res = SubMeta.FindByName(names[1], action);
+            if (res != null) return res;
+            return null;
+        }*/
 
         protected internal override void ResetCollectionIDs()
         {

@@ -97,6 +97,18 @@ namespace JsonTest
             return meta.RowCount;
         }
 
+        protected int OracleTest(string sql)
+        {
+            using var cmd = new OracleCommand(sql, connection);
+            using IDataReader reader = cmd.ExecuteReader();
+            var meta = Meta.MakeMeta(reader, "TEST");
+            object root = meta.ConstructJson(reader, true, false);
+            reader.Close();
+            if (printOut)
+                Console.WriteLine(root.ToString());
+            return meta.RowCount;
+        }
+
         static void Main(string[] args)
         {
             conf = JObject.Parse(System.IO.File.ReadAllText("appsettings.json"));
@@ -113,20 +125,22 @@ namespace JsonTest
             bool stationTest = false;
             bool departmentTest = false;
             bool ataTest = false;
+            bool ataTest2 = false;
             foreach(var a in args)
                 if      (a.Equals("p")) program.printOut = true;
                 else if (a.Equals("t")) Meta.trace = true;
                 else if (a.Equals("M")) memoryTest = true;
-                else if (a.Equals("S")) stationTest = true;
                 else if (a.Equals("A")) ataTest = true;
+                else if (a.Equals("S")) stationTest = true;
                 else if (a.Equals("D")) departmentTest = true;
+                else if (a.Equals("A2")) ataTest2 = true;
 
             //TestJObject();
 
             if (memoryTest)                    // demonstrates sub-object and two parallel collections, no SQL used
                 program.wrap("InMemoryTest", program.InMemoryTest);
 
-            if (stationTest || ataTest || departmentTest)
+            if (stationTest || ataTest || departmentTest || ataTest2)
             {
                 if (connectionStr.Equals(""))
                 {
@@ -145,6 +159,9 @@ namespace JsonTest
                 if (departmentTest)             // demonstrates two parallel sub-collections
                     program.wrap("DepartmentTest", program.OracleTest, (JObject)conf["DepartmentMeta"], conf["DepartmentQuery"].ToString(), false);
 
+                if (ataTest2)                    // demonstrates two parallel sub-collections
+                    program.wrap("OracleATATest", program.OracleTest, conf["ATAQuery2"].ToString());
+
                 program.connection.Close();
                 program.connection.Dispose();
             }
@@ -154,6 +171,12 @@ namespace JsonTest
         {
             System.DateTime started = System.DateTime.Now;
             int cnt = orig();
+            Console.WriteLine($"{name} cnt={cnt}, elapsed: {System.DateTime.Now.Subtract(started)}");
+        } 
+        public void wrap(string name, Func<string, int> orig, string sql)
+        {
+            System.DateTime started = System.DateTime.Now;
+            int cnt = orig(sql);
             Console.WriteLine($"{name} cnt={cnt}, elapsed: {System.DateTime.Now.Subtract(started)}");
         } 
         public void wrap(string name, Func<JObject, string, bool, int> orig, JObject meta, string sql, bool autoColumns)
