@@ -214,18 +214,13 @@ namespace Vespa.Db
                 var cname = fullName;
                 string fname = "";
                 string caction = "";
-                if (cname.StartsWith('(') && cname.Contains(')'))
-                {
-                    var vals =cname.Split(')');
-                    caction = vals[0].Substring(1);
-                    cname = vals[1];
-                }
-                if (cname.Contains(':'))
-                {
-                    var vals =cname.Split(':');
-                    cname = vals[0];
-                    fname = vals[1];
-                }
+                var vals =cname.Split(':');
+                cname = vals[0];
+                for (int j=1; j<vals.Length; j++)
+                    if (string.Compare(vals[j], "id", StringComparison.OrdinalIgnoreCase)==0)
+                        caction = vals[j];
+                    else
+                        fname = vals[j];
 
                 var names = cname.Split('.');
                 var current = result;
@@ -234,7 +229,7 @@ namespace Vespa.Db
                     var n = current.ChildByName(names[j]);
                     if (n==null)
                     {
-                        if (caction.Equals("array"))
+                        if (caction.Equals("id"))
                         {
                             var sub = new Meta("");
                             sub.__collectionid = fullName;
