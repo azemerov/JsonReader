@@ -205,9 +205,9 @@ namespace Vespa.Db
             return null;
         }
 
-        static public Meta MakeMeta(IDataReader reader, string name)
+        static public Meta MakeMeta(IDataReader reader)
         {
-            Meta result = new(name);
+            Meta result = new("");
             for (int i=0; i<reader.FieldCount; i++)
             {
                 var fullName = reader.GetName(i);
@@ -236,7 +236,7 @@ namespace Vespa.Db
                     {
                         if (caction.Equals("array"))
                         {
-                            var sub = new Meta(names[j]);
+                            var sub = new Meta("");
                             sub.__collectionid = fullName;
                             current.Subcollections.Add(new MetaArray(names[j], sub));
                             current = sub;
@@ -271,7 +271,7 @@ namespace Vespa.Db
                 
             }
 
-            return result;
+            return result.Subcollections[0];
         }
 
         public virtual void CollectColumns(Dictionary<string, string> columnRefs, ref int idx)
@@ -393,6 +393,21 @@ namespace Vespa.Db
             foreach(var coll in Subcollections)
                 coll.Process(rs, ref result, sorted, columnRefs);
         }
+
+        public virtual string ToString(string offset)
+        {
+            string s = "";
+            foreach(var map in Mappings)
+                s += $"{offset+"  "}{map.Name}: {map.Expression}\n";
+            foreach(var obj in Subobjects)
+                s += $"{obj.ToString(offset+"  ")}\n";
+            foreach(var col in Subcollections)
+                s += $"{col.ToString(offset+"  ")}\n";
+            if (Name.Equals(""))
+                return $"{offset}{{\n{s}{offset}}}";
+            else
+                return $"{offset}{Name}: {{\n{s}{offset}}}";
+        }
     }
 
     public class MetaArray: Meta
@@ -418,22 +433,10 @@ namespace Vespa.Db
 
         public override Meta ChildByName(string name)
         {
-            if (SubMeta.Name.Equals(name))
-                return SubMeta;
-            return null;
+            //if (SubMeta.Name.Equals(name))
+            return SubMeta.ChildByName(name);
+            //return null;
         }
-        /*
-        public override Meta FindByName(string name, string action)
-        {
-            var names = name.Split('.', 2);
-            if (name.Length==0)
-                return null;
-            if (Name==names[0])
-                return this;
-            var res = SubMeta.FindByName(names[1], action);
-            if (res != null) return res;
-            return null;
-        }*/
 
         protected internal override void ResetCollectionIDs()
         {
@@ -491,7 +494,11 @@ namespace Vespa.Db
             }
             if (currentItem != null)
                 SubMeta.Process(rs, ref currentItem, sorted, columnRefs);
+        }
 
+        public override string ToString(string offset)
+        {
+            return $"{offset}{Name}: [\n{SubMeta.ToString(offset+"  ")}\n{offset}]";
         }
     } 
 }

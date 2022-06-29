@@ -14,6 +14,7 @@ namespace JsonTest
         protected bool printOut = false;
         protected OracleConnection connection = null;
         static JObject conf;
+        static bool printMeta = false;
 
         static void IntrospectJson(JToken obj)
         {
@@ -71,6 +72,8 @@ namespace JsonTest
 
             var meta = Meta.MakeMeta(metaStr, "myCollection");
             //var meta = Meta.MakeMeta((JObject)conf["InMemoryMeta"], "myCollection");
+            if (printMeta)
+                Console.WriteLine(meta.ToString(""));
             reader = new CSVDataReader(new ListReader(dataLines), ',', true);
             object root = meta.ConstructJson(reader, true, false);
             reader.Close();
@@ -83,6 +86,8 @@ namespace JsonTest
         protected int OracleTest(JObject metadata, string sql, bool useAutoColumns)
         {
             var meta = Meta.MakeMeta(metadata);
+            if (printMeta)
+                Console.WriteLine(meta.ToString(""));
             if (useAutoColumns)
             {
                 var s = meta.MakeSelect();
@@ -101,7 +106,9 @@ namespace JsonTest
         {
             using var cmd = new OracleCommand(sql, connection);
             using IDataReader reader = cmd.ExecuteReader();
-            var meta = Meta.MakeMeta(reader, "TEST");
+            var meta = Meta.MakeMeta(reader);
+            if (printMeta)
+                Console.WriteLine(meta.ToString(""));
             object root = meta.ConstructJson(reader, true, false);
             reader.Close();
             if (printOut)
@@ -126,9 +133,11 @@ namespace JsonTest
             bool departmentTest = false;
             bool ataTest = false;
             bool ataTest2 = false;
+
             foreach(var a in args)
                 if      (a.Equals("p")) program.printOut = true;
                 else if (a.Equals("t")) Meta.trace = true;
+                else if (a.Equals("m")) printMeta = true;
                 else if (a.Equals("M")) memoryTest = true;
                 else if (a.Equals("A")) ataTest = true;
                 else if (a.Equals("S")) stationTest = true;
