@@ -205,9 +205,11 @@ namespace Vespa.Db
             return null;
         }
 
-        static public Meta MakeMeta(IDataReader reader)
+        static public Meta MakeMeta(IDataReader reader, out int minLevel)
         {
             Meta result = new("");
+            minLevel = 9999;
+            int addLevel = 0;
             for (int i=0; i<reader.FieldCount; i++)
             {
                 var fullName = reader.GetName(i);
@@ -223,6 +225,7 @@ namespace Vespa.Db
                         fname = vals[j];
 
                 var names = cname.Split('.');
+                int level = names.Length;
                 var current = result;
                 for (int j=0; j<names.Length-1; j++)
                 {
@@ -235,6 +238,7 @@ namespace Vespa.Db
                             sub.__collectionid = fullName;
                             current.Subcollections.Add(new MetaArray(names[j], sub));
                             current = sub;
+                            addLevel = 1;
                         }
                         else
                         {
@@ -248,6 +252,9 @@ namespace Vespa.Db
                     else
                         current = n;
                 }
+
+                if (level+addLevel < minLevel)
+                    minLevel = level+addLevel;
 
                 Func<object,object> function = null;
                 if (fname.Equals("bool") )
@@ -266,7 +273,13 @@ namespace Vespa.Db
                 
             }
 
-            return result.Subcollections[0];
+            if (result.Subcollections.Count==0)
+            {
+                minLevel = 0;
+                return result;
+            }
+            else
+                return result.Subcollections[0];
         }
 
         public virtual void CollectColumns(Dictionary<string, string> columnRefs, ref int idx)

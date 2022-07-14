@@ -106,10 +106,10 @@ namespace JsonTest
         {
             using var cmd = new OracleCommand(sql, connection);
             using IDataReader reader = cmd.ExecuteReader();
-            var meta = Meta.MakeMeta(reader);
+            var meta = Meta.MakeMeta(reader, out int minLevel);
             if (printMeta)
                 Console.WriteLine(meta.ToString(""));
-            object root = meta.ConstructJson(reader, true, false);
+            JToken root = meta.ConstructJson(reader, true, false);
             reader.Close();
             if (printOut)
                 Console.WriteLine(root.ToString());
@@ -134,22 +134,26 @@ namespace JsonTest
             bool ataTest = false;
             bool ataTest2 = false;
 
+            var cmdLineQuery = new List<string>();
+
             foreach(var a in args)
-                if      (a.Equals("p")) program.printOut = true;
-                else if (a.Equals("t")) Meta.trace = true;
-                else if (a.Equals("m")) printMeta = true;
-                else if (a.Equals("M")) memoryTest = true;
-                else if (a.Equals("A")) ataTest = true;
-                else if (a.Equals("S")) stationTest = true;
-                else if (a.Equals("D")) departmentTest = true;
-                else if (a.Equals("A2")) ataTest2 = true;
+                if      (a.StartsWith('~')) ;
+                else if (a.Equals("-p")) program.printOut = true;
+                else if (a.Equals("-t")) Meta.trace = true;
+                else if (a.Equals("-m")) printMeta = true;
+                else if (a.Equals("-M")) memoryTest = true;
+                else if (a.Equals("-A")) ataTest = true;
+                else if (a.Equals("-S")) stationTest = true;
+                else if (a.Equals("-D")) departmentTest = true;
+                else if (a.Equals("-A2")) ataTest2 = true;
+                else cmdLineQuery.Add(a);
 
             //TestJObject();
 
             if (memoryTest)                    // demonstrates sub-object and two parallel collections, no SQL used
                 program.wrap("InMemoryTest", program.InMemoryTest);
 
-            if (stationTest || ataTest || departmentTest || ataTest2)
+            if (stationTest || ataTest || departmentTest || ataTest2 || cmdLineQuery.Count>0)
             {
                 if (connectionStr.Equals(""))
                 {
@@ -170,6 +174,14 @@ namespace JsonTest
 
                 if (ataTest2)                    // demonstrates two parallel sub-collections
                     program.wrap("OracleATATest", program.OracleTest, conf["ATAQuery2"].ToString());
+
+                if (cmdLineQuery.Count > 0)
+                {
+                    string sql =  string.Join(' ', cmdLineQuery);
+                    sql = sql.Replace('`', '"');
+                    Console.WriteLine(sql);
+                    program.wrap("CommandLine", program.OracleTest, sql);
+                }
 
                 program.connection.Close();
                 program.connection.Dispose();
